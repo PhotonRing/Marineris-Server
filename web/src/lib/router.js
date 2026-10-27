@@ -1,18 +1,23 @@
 // Minimal history-API router. The Go server answers every unknown path with
-// index.html, so deep links work.
+// index.html, so deep links work. The static demo (GitHub Pages, which has no
+// such fallback) keeps the path in the URL fragment instead: #/routes.
 import { writable } from 'svelte/store';
 
-export const path = writable(window.location.pathname);
+const DEMO = import.meta.env.VITE_DEMO === '1';
+const current = () => (DEMO ? window.location.hash.slice(1) || '/' : window.location.pathname);
+
+export const path = writable(current());
 
 export function navigate(to, { replace = false } = {}) {
-  if (to === window.location.pathname) return;
-  if (replace) history.replaceState({}, '', to);
-  else history.pushState({}, '', to);
+  if (to === current()) return;
+  const url = DEMO ? '#' + to : to;
+  if (replace) history.replaceState({}, '', url);
+  else history.pushState({}, '', url);
   path.set(to);
   window.scrollTo(0, 0);
 }
 
-window.addEventListener('popstate', () => path.set(window.location.pathname));
+window.addEventListener('popstate', () => path.set(current()));
 
 // Svelte action: <a href="/x" use:link>
 export function link(node) {
