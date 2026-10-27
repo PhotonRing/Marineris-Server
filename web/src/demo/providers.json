@@ -1,0 +1,123 @@
+[
+ {
+  "id": "ovh",
+  "name": "OVHcloud",
+  "fields": [
+   {
+    "key": "endpoint",
+    "label": "API endpoint",
+    "secret": false,
+    "required": true,
+    "default": "ovh-eu",
+    "options": [
+     "ovh-eu",
+     "ovh-ca",
+     "ovh-us",
+     "kimsufi-eu",
+     "kimsufi-ca",
+     "soyoustart-eu",
+     "soyoustart-ca"
+    ]
+   },
+   {
+    "key": "application_key",
+    "label": "Application key",
+    "secret": false,
+    "required": true
+   },
+   {
+    "key": "application_secret",
+    "label": "Application secret",
+    "secret": true,
+    "required": true
+   },
+   {
+    "key": "consumer_key",
+    "label": "Consumer key",
+    "secret": true,
+    "required": true
+   }
+  ],
+  "guide": "Create the token at https://<endpoint>/createToken/ (e.g. https://eu.api.ovh.com/createToken/) and grant ONLY these rights, repeated for every zone this profile manages (replace <zone>):\n  GET    /domain/zone/<zone>/*\n  POST   /domain/zone/<zone>/*\n  PUT    /domain/zone/<zone>/*\n  DELETE /domain/zone/<zone>/*\nNo other paths are needed. Use one profile per OVH account; a profile can manage several zones of the same account."
+ },
+ {
+  "id": "cloudflare",
+  "name": "Cloudflare",
+  "fields": [
+   {
+    "key": "api_token",
+    "label": "API token",
+    "secret": true,
+    "required": true,
+    "help": "Zone.DNS:Edit permission, restricted to the zones this profile manages."
+   },
+   {
+    "key": "zone_token",
+    "label": "Zone read token (optional)",
+    "secret": true,
+    "required": false,
+    "help": "Only needed when the API token is limited to specific zones and cannot list them: a token with Zone.Zone:Read on all zones."
+   }
+  ],
+  "guide": "Create an API token (not the global API key) with permission Zone \u2192 DNS \u2192 Edit, and under Zone Resources include only the zones this profile manages."
+ },
+ {
+  "id": "gandi",
+  "name": "Gandi",
+  "fields": [
+   {
+    "key": "bearer_token",
+    "label": "Personal access token",
+    "secret": true,
+    "required": true
+   }
+  ],
+  "guide": "Create a personal access token restricted to the organisation and domains this profile manages, with only the 'Manage domain name technical configurations' permission."
+ },
+ {
+  "id": "infomaniak",
+  "name": "Infomaniak",
+  "fields": [
+   {
+    "key": "api_token",
+    "label": "API token",
+    "secret": true,
+    "required": true
+   }
+  ],
+  "guide": "Create an API token in the Infomaniak manager with only the 'Domain' scope."
+ },
+ {
+  "id": "route53",
+  "name": "Amazon Route 53",
+  "fields": [
+   {
+    "key": "access_key_id",
+    "label": "Access key ID",
+    "secret": false,
+    "required": true
+   },
+   {
+    "key": "secret_access_key",
+    "label": "Secret access key",
+    "secret": true,
+    "required": true
+   },
+   {
+    "key": "region",
+    "label": "Region",
+    "secret": false,
+    "required": false,
+    "default": "us-east-1"
+   },
+   {
+    "key": "hosted_zone_id",
+    "label": "Hosted zone ID (optional)",
+    "secret": false,
+    "required": false,
+    "help": "Set it when the IAM policy does not allow route53:ListHostedZonesByName."
+   }
+  ],
+  "guide": "Create an IAM user whose policy allows route53:ChangeResourceRecordSets and route53:ListResourceRecordSets on arn:aws:route53:::hostedzone/<zone-id> only, plus route53:ListHostedZonesByName and route53:GetChange."
+ }
+]

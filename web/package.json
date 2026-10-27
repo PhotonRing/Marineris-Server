@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "check": "svelte-check --threshold error"
+    "check": "svelte-check --threshold error",
+    "build:demo": "VITE_DEMO=1 vite build"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "7.3.1",

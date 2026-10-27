@@ -23,6 +23,7 @@ CLAUDE.md
 /bin/
 /dist/
 /web/dist/
+/web/dist-demo/
 /internal/webui/dist/*
 !/internal/webui/dist/.keep
 /coverage*
