@@ -1,0 +1,63 @@
+name: Housekeeping
+
+# Keeps the repository tidy without manual steps:
+# - the branch of a merged pull request is deleted right away (Dependabot
+#   deletes its own);
+# - monthly, finished runs older than 30 days are deleted from the Actions
+#   page, and branches whose work is already in main are deleted;
+# - a manual run does the same, with a chosen age (0 deletes every finished
+#   run).
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "41 4 1 * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Delete finished runs older than this many days (0 = all)
+        default: "30"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  delete-merged-branch:
+    name: Delete the merged branch
+    if: >-
+      github.event_name == 'pull_request' && github.event.pull_request.merged &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !startsWith(github.event.pull_request.head.ref, 'dependabot/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$BRANCH" || echo "already deleted"
+
+  tidy:
+    name: Delete old runs and merged branches
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: write # delete runs
+      contents: write # delete branches
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Delete old runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DAYS: ${{ github.event.inputs.days || '30' }}
+        run: scripts/prune-runs.sh "$DAYS"
+      - name: Delete branches whose work is in main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/cleanup-branches.sh

@@ -1,0 +1,188 @@
+name: Release
+
+# Releases are automatic. To release version X.Y.Z, move the entries of
+# "Unreleased" in CHANGELOG.md to a new "## [X.Y.Z] - date" section and merge
+# to main. On every push to main, this workflow looks at the newest version
+# section of CHANGELOG.md; if its tag vX.Y.Z does not exist yet, it runs the
+# full test suite, publishes the signed images, creates the tag and the GitHub
+# release (notes taken from that section) and deletes merged branches.
+# It only starts when CHANGELOG.md changes (or by hand, e.g. to retry).
+on:
+  push:
+    branches: [main]
+    paths: [CHANGELOG.md]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Is there a version to release?
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: v
+        run: |
+          ver="$(sed -n 's/^## \[\([0-9][0-9.]*[0-9A-Za-z.-]*\)\].*/\1/p' CHANGELOG.md | head -n 1)"
+          if [ -z "$ver" ]; then
+            echo "No version section in CHANGELOG.md: nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' || { echo "::error::invalid version '$ver' in CHANGELOG.md"; exit 1; }
+          tag="v$ver"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag is already released."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Releasing $tag."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            git tag "$tag" && scripts/release-notes.sh "$tag" > /dev/null
+          fi
+
+  checks:
+    name: Full test suite
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    # A called workflow may not use more permissions than its caller grants
+    # (CodeQL uploads its results).
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/ci.yml
+
+  images:
+    name: Publish signed images
+    needs: [version, checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # keyless cosign signing
+    outputs:
+      marineris-digest: ${{ steps.marineris.outputs.digest }}
+      caddy-digest: ${{ steps.caddy.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Both images cross-compile on the runner; emulation is only used for
+      # the short final steps of the arm64 images.
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image names
+        id: names
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "marineris=ghcr.io/$owner/marineris" >> "$GITHUB_OUTPUT"
+          echo "caddy=ghcr.io/$owner/marineris-caddy" >> "$GITHUB_OUTPUT"
+      - id: meta-marineris
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.names.outputs.marineris }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.tag }}
+            type=raw,value=latest,enable=${{ !contains(needs.version.outputs.tag, '-') }}
+      - id: meta-caddy
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.names.outputs.caddy }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.tag }}
+            type=raw,value=latest,enable=${{ !contains(needs.version.outputs.tag, '-') }}
+      - id: marineris
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-marineris.outputs.tags }}
+          labels: ${{ steps.meta-marineris.outputs.labels }}
+          build-args: VERSION=${{ needs.version.outputs.tag }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=marineris
+          cache-to: type=gha,mode=max,scope=marineris,ignore-error=true
+      - id: caddy
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: deploy/caddy
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-caddy.outputs.tags }}
+          labels: ${{ steps.meta-caddy.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=caddy
+          cache-to: type=gha,mode=max,scope=caddy,ignore-error=true
+      - name: Sign images (Sigstore keyless)
+        env:
+          M: ${{ steps.names.outputs.marineris }}@${{ steps.marineris.outputs.digest }}
+          C: ${{ steps.names.outputs.caddy }}@${{ steps.caddy.outputs.digest }}
+        run: cosign sign --yes "$M" "$C"
+
+  release:
+    name: Tag and GitHub release
+    needs: [version, images]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Write release notes (changelog + commits + images)
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          git tag "$TAG" "$GITHUB_SHA"
+          scripts/release-notes.sh "$TAG" \
+            "${{ needs.images.outputs.marineris-digest }}" "${{ needs.images.outputs.caddy-digest }}" > notes.md
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Create the tag and the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          prerelease=""
+          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
+          # shellcheck disable=SC2086
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Marineris $TAG" --notes-file notes.md $prerelease
+
+  cleanup-branches:
+    name: Keep only main
+    needs: release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # delete merged branches
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Delete branches whose work is in main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/cleanup-branches.sh

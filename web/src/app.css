@@ -1,0 +1,701 @@
+/* Marineris — Mars theme. Colours are CSS variables overridden at runtime
+   from /branding/theme.json. */
+:root,
+[data-theme='dark'] {
+  --bg: #111214;
+  --surface: #1a1b1e;
+  --surface-2: #232428;
+  --border: #2f3036;
+  --text: #e9e9ee;
+  --muted: #9a9ba5;
+  --accent: #e8743b;
+  --accent-2: #f2a65a;
+  --ok: #6cc070;
+  --warn: #e3b341;
+  --error: #ef5b4c;
+  --radius: 10px;
+  --shadow: 0 6px 24px rgb(0 0 0 / 28%);
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #eef0f3;
+  --border: #dfe2e7;
+  --text: #1c1d21;
+  --muted: #636672;
+  --accent: #d0612a;
+  --accent-2: #b8741a;
+  --ok: #2f8a3a;
+  --warn: #9a6a00;
+  --error: #c4352a;
+  --shadow: 0 6px 24px rgb(20 20 30 / 8%);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+}
+
+body {
+  background-image: radial-gradient(1200px 600px at 100% -10%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent-2);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 0.6em;
+  line-height: 1.25;
+}
+h1 {
+  font-size: 1.6rem;
+}
+h2 {
+  font-size: 1.2rem;
+}
+h3 {
+  font-size: 1rem;
+}
+
+code,
+pre,
+textarea.code {
+  font-family: ui-monospace, 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+pre {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+  overflow: auto;
+  max-height: 60vh;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Layout ---------------------------------------------------------------- */
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+.sidebar {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border-right: 1px solid var(--border);
+  padding: 1rem 0.75rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.25rem 0.5rem 1.2rem;
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+}
+.brand img {
+  width: 34px;
+  height: 34px;
+}
+.nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.nav a:hover {
+  background: var(--surface-2);
+  color: var(--text);
+  text-decoration: none;
+}
+.nav a.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--text);
+}
+.nav .section {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 1rem 0.7rem 0.3rem;
+  opacity: 0.7;
+}
+.main {
+  padding: 1.5rem 2rem 4rem;
+  max-width: 1300px;
+  width: 100%;
+}
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.spread {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.stack > * + * {
+  margin-top: 1rem;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 0.85rem;
+}
+.mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.right {
+  text-align: right;
+}
+.hidden {
+  display: none !important;
+}
+.mt {
+  margin-top: 1rem;
+}
+.w-full {
+  width: 100%;
+}
+
+/* Cards ------------------------------------------------------------------ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem;
+  box-shadow: var(--shadow);
+}
+.card h2 {
+  margin-bottom: 0.8rem;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.stat .value {
+  font-size: 1.9rem;
+  font-weight: 700;
+}
+.stat .label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Forms ------------------------------------------------------------------ */
+label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 0.3rem;
+}
+.field {
+  margin-bottom: 0.9rem;
+}
+.field .help {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+  white-space: pre-line;
+}
+input,
+select,
+textarea {
+  width: 100%;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+}
+input[type='checkbox'] {
+  width: auto;
+  margin-right: 0.4rem;
+  accent-color: var(--accent);
+}
+textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+textarea.code {
+  min-height: 22rem;
+  tab-size: 2;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 1px;
+}
+.check {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+}
+
+button,
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.95rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+button.primary {
+  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 80%, black));
+  border-color: transparent;
+  color: #fff;
+}
+button.danger {
+  background: color-mix(in srgb, var(--error) 85%, black);
+  border-color: transparent;
+  color: #fff;
+}
+button.ghost {
+  background: transparent;
+}
+button.small {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+/* Tables ----------------------------------------------------------------- */
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  text-align: left;
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+}
+tr:hover td {
+  background: color-mix(in srgb, var(--surface-2) 50%, transparent);
+}
+
+/* Badges & alerts ---------------------------------------------------------- */
+.badge {
+  display: inline-block;
+  padding: 0.08rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.badge.ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+}
+.badge.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+}
+.badge.error {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 50%, transparent);
+}
+.alert {
+  border-radius: var(--radius);
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  white-space: pre-line;
+}
+.alert.error {
+  border-color: color-mix(in srgb, var(--error) 60%, transparent);
+  background: color-mix(in srgb, var(--error) 12%, var(--surface));
+}
+.alert.warning {
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+}
+.alert.ok {
+  border-color: color-mix(in srgb, var(--ok) 60%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, var(--surface));
+}
+
+/* Auth screens --------------------------------------------------------------- */
+.center {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+}
+.auth-card {
+  width: min(460px, 100%);
+}
+.auth-card .brand {
+  justify-content: center;
+  font-size: 1.5rem;
+  padding-bottom: 0.5rem;
+}
+.qr {
+  display: block;
+  margin: 0.5rem auto;
+  width: 200px;
+  height: 200px;
+  image-rendering: pixelated;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px;
+}
+.codes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem 1rem;
+}
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 1rem 0;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+/* Modal ------------------------------------------------------------------ */
+dialog {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.3rem 1.4rem;
+  width: min(720px, calc(100vw - 2rem));
+  box-shadow: var(--shadow);
+}
+dialog.wide {
+  width: min(1100px, calc(100vw - 2rem));
+}
+dialog::backdrop {
+  background: rgb(10 5 3 / 65%);
+  backdrop-filter: blur(2px);
+}
+
+/* Toasts ------------------------------------------------------------------ */
+.toasts {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 1000;
+  max-width: min(440px, calc(100vw - 2rem));
+}
+.toast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--ok);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  box-shadow: var(--shadow);
+  white-space: pre-line;
+}
+.toast.error {
+  border-left-color: var(--error);
+}
+
+.tabs {
+  display: flex;
+  gap: 0.3rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+.tabs button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    height: auto;
+  }
+  .main {
+    padding: 1rem;
+  }
+}
+.end {
+  justify-content: flex-end;
+}
+
+/* Branding ----------------------------------------------------------------- */
+/* The wordmark is used as a mask so it takes the theme's text colour. */
+.wordmark {
+  display: inline-block;
+  width: 150px;
+  height: 21px;
+  background-color: var(--text);
+  -webkit-mask: url('/branding/wordmark.svg') center / contain no-repeat;
+  mask: url('/branding/wordmark.svg') center / contain no-repeat;
+}
+
+/* Login and setup screens: Mars landscape behind a darkening overlay, with a
+   frosted card so text keeps a high contrast. App pages stay plain. */
+.auth-bg {
+  background:
+    linear-gradient(180deg, rgb(10 6 4 / 55%), rgb(10 6 4 / 80%)),
+    url('/branding/background.webp') center / cover no-repeat fixed;
+}
+.auth-bg .card {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(10px);
+}
+.auth-logo {
+  display: flex;
+  justify-content: center;
+}
+.auth-logo img {
+  width: 170px;
+  height: 170px;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .auth-bg .card {
+    background: var(--surface);
+    backdrop-filter: none;
+  }
+}
+
+/* Hub ------------------------------------------------------------------------ */
+.hub-head {
+  margin-bottom: 1.2rem;
+  align-items: flex-end;
+}
+.hub-title {
+  font-size: 1.7rem;
+  margin: 0;
+}
+.hub-clock {
+  font-size: 2.4rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.widgets {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  margin-bottom: 1.4rem;
+}
+.widget {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+}
+.w-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.w-value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0.15rem 0 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+.w-value.net {
+  display: flex;
+  flex-direction: column;
+  font-size: 1rem;
+}
+.w-sub {
+  font-size: 0.78rem;
+  margin-top: 0.3rem;
+}
+.bar {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--ok);
+  transition: width 0.6s ease;
+}
+.bar-fill.warn {
+  background: var(--warn);
+}
+.bar-fill.error {
+  background: var(--error);
+}
+.hub-search {
+  max-width: 420px;
+  margin-bottom: 1rem;
+}
+.tiles {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+.tile {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.tile:hover {
+  text-decoration: none;
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.tile-icon {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: 10px;
+  object-fit: contain;
+}
+.tile-initials {
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  color: var(--accent);
+}
+.tile-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tile-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile-lock {
+  font-size: 0.7rem;
+  margin-left: 0.35rem;
+}
+.tile-sub {
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Optional background (Settings → Hub): the main area only, with a strong
+   overlay so tiles and widgets stay readable. */
+.main:has(.hub-bg) {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 78%, transparent), color-mix(in srgb, var(--bg) 92%, transparent)),
+    url('/branding/background.webp') center / cover no-repeat fixed;
+  min-height: 100vh;
+}
+.hub-bg .tile,
+.hub-bg .widget {
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(8px);
+}
+.label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 0.3rem;
+}
+.row > select {
+  width: auto;
+  flex: 1;
+}

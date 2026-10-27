@@ -1,0 +1,47 @@
+# Runtime data: real configuration, credentials, databases, certificates.
+# NEVER commit anything from these folders.
+/data/
+/deploy/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.key
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
+!*.example
+
+# Assistant / tooling metadata that must not be published
+CLAUDE.md
+.claude/
+
+# Build output
+/bin/
+/dist/
+/web/dist/
+/internal/webui/dist/*
+!/internal/webui/dist/.keep
+/coverage*
+*.out
+*.test
+*.prof
+
+# Node
+node_modules/
+/web/.vite/
+/test/e2e/test-results/
+/test/e2e/playwright-report/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+/web/node_modules/
+/test/integration/logs/
+/.dev-data/

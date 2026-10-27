@@ -1,0 +1,28 @@
+# Overlay of deploy/compose.yml for the local demo (deploy/demo/demo.sh).
+#
+# The whole stack runs as in production, except that Caddy only listens on
+# this computer (127.0.0.1), never on the network. Names under .localhost
+# reach this computer in every browser without any DNS setup, and Caddy
+# gives them certificates from its own local CA instead of Let's Encrypt.
+services:
+  caddy:
+    ports: !override
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+
+  # An example application to publish with a route, from the UI.
+  # It reuses the demo's Caddy image (built without file capabilities, so it
+  # runs with every capability dropped).
+  hello:
+    image: ${MARINERIS_CADDY_IMAGE}
+    container_name: demo-hello
+    entrypoint: ["caddy"]
+    command: ["respond", "--listen", ":8000", "Hello from the Marineris demo! Signed in as: {http.request.header.Remote-User}"]
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /config:uid=65532,gid=65532
+    networks:
+      - apps

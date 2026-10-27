@@ -1,0 +1,440 @@
+name: CI
+
+# The only workflow that tests the code. It runs:
+# - on pull requests, once per push (a newer push cancels the older run);
+#   documentation-only changes skip it;
+# - from the release workflow, before images are published;
+# - weekly, with long fuzzing (and the code-scanning baseline of main).
+#
+# Jobs only run when the files they test changed (scripts/changed-areas.sh).
+# The images are built once, in the "images" job, and shared with the jobs
+# that test them. Multi-arch images are built by the release workflow only.
+on:
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - "branding/LICENSE"
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+# Least privilege: jobs only read the repository unless stated otherwise.
+permissions:
+  contents: read
+
+concurrency:
+  # github.workflow is the caller's name when the release workflow calls this one.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: "26"
+  TRIVY_VERSION: "0.76.1"
+  TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+
+jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.areas.outputs.go }}
+      web: ${{ steps.areas.outputs.web }}
+      e2e: ${{ steps.areas.outputs.e2e }}
+      caddy: ${{ steps.areas.outputs.caddy }}
+      deploy: ${{ steps.areas.outputs.deploy }}
+      images: ${{ steps.areas.outputs.go == 'true' || steps.areas.outputs.web == 'true' || steps.areas.outputs.caddy == 'true' || steps.areas.outputs.deploy == 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: areas
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+        run: |
+          if [ -n "$BASE" ]; then scripts/changed-areas.sh "$BASE" "$HEAD"; else scripts/changed-areas.sh; fi
+          cat "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------- source
+
+  lint:
+    name: Lint
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint (incl. gosec)
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          args: --build-tags integration
+      - name: go mod tidy is clean
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+      - name: Forbidden files (runtime data, real .env, keys, assistant metadata)
+        run: scripts/check-forbidden-files.sh
+      - name: shellcheck
+        run: shellcheck scripts/*.sh deploy/install.sh deploy/demo/demo.sh test/integration/run.sh test/e2e/serve.sh
+      - name: hadolint (Marineris)
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: Dockerfile
+      - name: hadolint (Caddy)
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: deploy/caddy/Dockerfile
+      - name: compose file is valid
+        run: |
+          cp deploy/.env.example /tmp/test.env
+          sed -i 's/^DOCKER_GID=.*/DOCKER_GID=999/' /tmp/test.env
+          docker compose --env-file /tmp/test.env -f deploy/compose.yml config --quiet
+          docker compose --env-file /tmp/test.env -f deploy/compose.yml -f deploy/demo/compose.demo.yml config --quiet
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Web UI type check
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+
+  secrets:
+    name: Secret scanning (gitleaks, full history)
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # Installed from source through the Go checksum database rather than a
+      # third-party action.
+      - run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
+      - run: gitleaks git --config .gitleaks.toml --redact --no-banner --verbose .
+
+  test:
+    name: Unit & security tests
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # One run gives the results, the race detector and the coverage gate.
+      # Fuzz targets run their seed corpus here; real fuzzing runs weekly.
+      - name: go test -race (includes the API access matrix and golden route table) + coverage gate
+        run: |
+          set -o pipefail
+          go test -race -count=1 -coverprofile=coverage.out ./... | scripts/coverage-gate.sh
+
+  dependencies:
+    name: Vulnerable dependencies (govulncheck, npm audit)
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+      - name: govulncheck (reachable vulnerabilities in Go code and dependencies)
+        run: govulncheck ./...
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: npm audit
+        run: |
+          (cd web && npm audit --audit-level=high)
+          (cd test/e2e && npm audit --audit-level=high)
+
+  codeql:
+    name: CodeQL
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: matrix.language == 'go'
+        with:
+          go-version-file: go.mod
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+      - uses: github/codeql-action/autobuild@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+
+  # ------------------------------------------------------------- running UI
+
+  e2e:
+    name: Browser end-to-end (Playwright)
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build UI and binary
+        run: |
+          (cd web && npm ci --no-audit --no-fund && npm run build)
+          CGO_ENABLED=0 go build -o bin/marineris ./cmd/marineris
+      - name: Run Playwright
+        working-directory: test/e2e
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: test/e2e/playwright-report
+
+  zap:
+    name: OWASP ZAP baseline
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Start Marineris (UI + API, no Docker/Caddy)
+        run: |
+          (cd web && npm ci --no-audit --no-fund && npm run build)
+          go build -o bin/marineris ./cmd/marineris
+          mkdir -p "$RUNNER_TEMP/data"
+          MARINERIS_DATA_DIR="$RUNNER_TEMP/data" MARINERIS_LOCAL_ADDR=0.0.0.0:18181 MARINERIS_EDGE_ADDR=0.0.0.0:18180 \
+          MARINERIS_DOCKER_HOST=tcp://127.0.0.1:1 MARINERIS_CADDY_ADMIN=http://127.0.0.1:2 \
+            nohup bin/marineris serve > "$RUNNER_TEMP/marineris.log" 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:18181/api/health && break; sleep 1; done
+      - name: ZAP baseline scan (local listener)
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: http://localhost:18181
+          artifact_name: zap-local
+          rules_file_name: .zap/rules.tsv
+          # Fail on the rules promoted to FAIL in .zap/rules.tsv; other
+          # findings are reported as warnings in the job log.
+          cmd_options: "-I"
+          fail_action: true
+          allow_issue_writing: false
+      - name: ZAP baseline scan (edge listener)
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: http://localhost:18180
+          artifact_name: zap-edge
+          rules_file_name: .zap/rules.tsv
+          cmd_options: "-I"
+          fail_action: true
+          allow_issue_writing: false
+
+  # ----------------------------------------------------------------- images
+
+  images:
+    name: Build images
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Layer caching: unchanged parts (e.g. the Caddy build) are not rebuilt.
+      # A failed cache upload must not fail the build.
+      - name: Marineris image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          tags: marineris:dev
+          outputs: type=docker,dest=${{ runner.temp }}/images/marineris.tar
+          cache-from: type=gha,scope=marineris
+          cache-to: type=gha,mode=max,scope=marineris,ignore-error=true
+      - name: Caddy image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: deploy/caddy
+          tags: marineris-caddy:dev
+          outputs: type=docker,dest=${{ runner.temp }}/images/marineris-caddy.tar
+          cache-from: type=gha,scope=caddy
+          cache-to: type=gha,mode=max,scope=caddy,ignore-error=true
+      - name: Test ACME CA image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: test/integration/pebble
+          tags: marineris-it-pebble:dev
+          outputs: type=docker,dest=${{ runner.temp }}/images/marineris-it-pebble.tar
+          cache-from: type=gha,scope=pebble
+          cache-to: type=gha,mode=max,scope=pebble,ignore-error=true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: images
+          path: ${{ runner.temp }}/images
+          retention-days: 1
+
+  integration:
+    name: Integration (real stack, Pebble ACME, CrowdSec)
+    needs: [changes, images]
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.caddy == 'true' || needs.changes.outputs.deploy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: images
+          path: ${{ runner.temp }}/images
+      - name: Load images
+        run: for f in "$RUNNER_TEMP"/images/*.tar; do docker load -i "$f"; done
+      - name: Run the integration suite
+        env:
+          IT_CROWDSEC: "1"
+          SKIP_BUILD: "1"
+        run: test/integration/run.sh
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: integration-logs
+          path: test/integration/logs
+
+  real-tools:
+    name: Generated configs vs. real Caddy & Authelia
+    needs: [changes, images]
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.caddy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: images
+          path: ${{ runner.temp }}/images
+      - name: caddy validate + authelia validate-config on generated configs
+        run: |
+          docker load -i "$RUNNER_TEMP/images/marineris-caddy.tar"
+          id=$(docker create marineris-caddy:dev)
+          docker cp "$id:/usr/bin/caddy" ./caddy-bin
+          docker rm "$id"
+          CADDY_BIN=$PWD/caddy-bin MARINERIS_TEST_DOCKER=1 go test -count=1 -v -run 'TestCaddyValidate|TestAutheliaValidateConfig' ./internal/caddy/ ./internal/authelia/
+
+  trivy:
+    name: Image & configuration scan (Trivy)
+    needs: [changes, images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: images
+          path: ${{ runner.temp }}/images
+      # The official release binary, checked against its pinned SHA-256
+      # (from the release's checksums file).
+      - name: Install Trivy
+        run: |
+          f="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/$f"
+          echo "$TRIVY_SHA256  $f" | sha256sum -c -
+          tar -xzf "$f" trivy && sudo install -m 0755 trivy /usr/local/bin/trivy && rm -f trivy "$f"
+      - name: Scan images (fail on fixable HIGH/CRITICAL)
+        run: |
+          for img in marineris marineris-caddy; do
+            trivy image --input "$RUNNER_TEMP/images/$img.tar" --exit-code 1 --ignore-unfixed --severity HIGH,CRITICAL --scanners vuln
+          done
+      - name: Scan Dockerfiles and compose for misconfigurations
+        run: trivy config --exit-code 1 --severity HIGH,CRITICAL .
+
+  # ----------------------------------------------------------------- weekly
+
+  fuzz:
+    name: Extended fuzzing
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Fuzz every target for 4 minutes
+        run: |
+          for t in $(grep -rho 'func Fuzz[A-Za-z]*' --include=*_test.go internal | sed 's/func //' | sort -u); do
+            pkg=$(grep -rl "func $t(" --include=*_test.go internal | xargs dirname | head -1)
+            echo "::group::$t"
+            go test "./$pkg" -run '^$' -fuzz "^$t\$" -fuzztime 4m
+            echo "::endgroup::"
+          done
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-corpus
+          path: internal/**/testdata/fuzz

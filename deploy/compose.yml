@@ -1,0 +1,255 @@
+# Marineris stack.
+#
+#   cp .env.example .env   # then edit it
+#   ./install.sh            # creates the data directory with the right owner
+#   docker compose up -d
+#
+# Networks (least privilege: each service only joins what it needs):
+#   edge        internet-facing; Caddy only publishes 80/443
+#   docker-api  Marineris <-> socket proxy (internal)
+#   ui          Caddy <-> Marineris (internal)
+#   auth        Caddy, Marineris <-> Authelia (internal)
+#   crowdsec    Caddy <-> CrowdSec (CrowdSec needs internet for its hub)
+#   apps        Caddy <-> your applications (internal, named marineris-apps)
+#   outbound    Marineris -> internet (DNS provider APIs)
+
+name: marineris
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  socket-proxy:
+    <<: *hardening
+    image: wollomatic/socket-proxy:1@sha256:ff95d6ff6c27853005ef85eb8f4ab5923dc3d2f1e055f98fb6aeeaceec3fe848
+    container_name: marineris-socket-proxy
+    # Read access to the Docker socket only through the docker group.
+    user: "65534:${DOCKER_GID:?set DOCKER_GID in .env (stat -c %g /var/run/docker.sock)}"
+    mem_limit: 64m
+    pids_limit: 64
+    command:
+      - -loglevel=INFO
+      - -listenip=0.0.0.0
+      - -allowfrom=marineris
+      - -shutdowngracetime=5
+      - -watchdoginterval=600
+      - -stoponwatchdog
+      # Bind mounts in containers created through the proxy must come from here.
+      # (the Authelia folders are needed by the config validator).
+      - -allowbindmountfrom=${MARINERIS_DATA}/stacks,${MARINERIS_DATA}/authelia,${MARINERIS_DATA}/secrets/authelia,${MARINERIS_ALLOWED_BIND_ROOTS:-/srv,/mnt,/media}
+      # Allow-list of Docker API endpoints. Notably absent: exec, build,
+      # commit, archive/export, attach, swarm, plugins, secrets, configs.
+      - '-allowHEAD=(/v1\.[0-9]+)?/_ping'
+      - '-allowGET=(/v1\.[0-9]+)?/(_ping|version|info|events|system/df|containers/json|containers/[a-zA-Z0-9_.-]+/(json|logs|stats|top)|images/json|images/.+/json|networks|networks/[a-zA-Z0-9_.-]+|volumes|volumes/[a-zA-Z0-9_.-]+|distribution/.+/json)'
+      - '-allowPOST=(/v1\.[0-9]+)?/(containers/create|containers/[a-zA-Z0-9_.-]+/(start|stop|restart|kill|wait|rename|pause|unpause)|networks/create|networks/[a-zA-Z0-9_.-]+/(connect|disconnect)|volumes/create|images/create)'
+      - '-allowDELETE=(/v1\.[0-9]+)?/(containers|networks|volumes)/[a-zA-Z0-9_.-]+'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker-api
+    labels:
+      io.marineris.system: "true"
+
+  marineris-init:
+    image: ${MARINERIS_IMAGE:-ghcr.io/photonring/marineris:latest}
+    container_name: marineris-init
+    command: ["init"]
+    restart: "no"
+    user: "65532:65532"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: none
+    environment:
+      MARINERIS_DATA_DIR: ${MARINERIS_DATA}
+    volumes:
+      - ${MARINERIS_DATA}:${MARINERIS_DATA}
+    labels:
+      io.marineris.system: "true"
+
+  marineris:
+    <<: *hardening
+    image: ${MARINERIS_IMAGE:-ghcr.io/photonring/marineris:latest}
+    container_name: marineris
+    user: "65532:65532"
+    mem_limit: 512m
+    pids_limit: 256
+    depends_on:
+      marineris-init:
+        condition: service_completed_successfully
+      socket-proxy:
+        condition: service_started
+    environment:
+      MARINERIS_DATA_DIR: ${MARINERIS_DATA}
+      MARINERIS_ALLOWED_BIND_ROOTS: ${MARINERIS_DATA}/stacks,${MARINERIS_ALLOWED_BIND_ROOTS:-/srv,/mnt,/media}
+      MARINERIS_BRANDING_DIR: ${MARINERIS_BRANDING_DIR:-}
+      MARINERIS_LOG_LEVEL: ${MARINERIS_LOG_LEVEL:-info}
+      MARINERIS_AUTHELIA_IMAGE: authelia/authelia:4.39.28@sha256:bd97cff4fcbf715b5ff1f9ae286afbe6033afce385302520b0368122d43a6f54
+    volumes:
+      # Same absolute path inside and outside, so stack bind mounts resolve.
+      - ${MARINERIS_DATA}:${MARINERIS_DATA}
+      - caddy-admin:/run/caddy-admin
+      # Host network counters for the hub widget (read-only, counters only).
+      - /proc/1/net/dev:/host/net-dev:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    ports:
+      # Break-glass / first-run listener: loopback of the host ONLY.
+      # Reach it with: ssh -L 8081:127.0.0.1:8081 you@server
+      - "127.0.0.1:${MARINERIS_LOCAL_PORT:-8081}:8081"
+    networks:
+      - docker-api
+      - ui
+      - auth
+      # Outbound access for DNS provider APIs (profile tests).
+      - outbound
+    labels:
+      io.marineris.system: "true"
+
+  caddy:
+    <<: *hardening
+    image: ${MARINERIS_CADDY_IMAGE:-ghcr.io/photonring/marineris-caddy:latest}
+    container_name: marineris-caddy
+    user: "65532:65532"
+    mem_limit: 512m
+    pids_limit: 512
+    sysctls:
+      # Lets the unprivileged Caddy user bind ports 80 and 443.
+      net.ipv4.ip_unprivileged_port_start: 0
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+      - caddy-admin:/run/caddy-admin
+      - caddy-logs:/var/log/caddy
+      - ${MARINERIS_DATA}/static:/srv/static:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks:
+      - edge
+      - ui
+      - auth
+      - crowdsec
+      - apps
+    labels:
+      io.marineris.system: "true"
+
+  authelia:
+    <<: *hardening
+    image: authelia/authelia:4.39.28@sha256:bd97cff4fcbf715b5ff1f9ae286afbe6033afce385302520b0368122d43a6f54
+    container_name: marineris-authelia
+    user: "65532:65532"
+    mem_limit: 256m
+    pids_limit: 128
+    depends_on:
+      marineris-init:
+        condition: service_completed_successfully
+    environment:
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE: /secrets/jwt
+      AUTHELIA_SESSION_SECRET_FILE: /secrets/session
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /secrets/storage
+      X_AUTHELIA_CONFIG: /config/configuration.yml
+    volumes:
+      - ${MARINERIS_DATA}/authelia:/config:ro
+      - ${MARINERIS_DATA}/secrets/authelia:/secrets:ro
+      - ${MARINERIS_DATA}/authelia-notify:/notifications
+      - ${MARINERIS_DATA}/authelia-data:/data
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9091/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    networks:
+      - auth
+    labels:
+      io.marineris.system: "true"
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.8.1@sha256:0f2523fa61ef507f15d953045cface490cc880670c62f2755ced17524107f71a
+    container_name: marineris-crowdsec
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Read Caddy's access log (mode 0640, group 65532).
+    group_add:
+      - "65532"
+    mem_limit: 512m
+    pids_limit: 256
+    depends_on:
+      marineris-init:
+        condition: service_completed_successfully
+    # The bouncer key is generated by marineris-init; CrowdSec registers it
+    # for Caddy at start-up.
+    entrypoint: ["/bin/bash", "-c", "export BOUNCER_KEY_caddy=\"$$(cat /run/secrets/bouncer_key)\" && exec /bin/bash /docker_start.sh"]
+    environment:
+      COLLECTIONS: "crowdsecurity/caddy crowdsecurity/http-cve crowdsecurity/base-http-scenarios crowdsecurity/whitelist-good-actors"
+      GID: "65532"
+    volumes:
+      - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.d/caddy.yaml:ro
+      - ${MARINERIS_DATA}/secrets/crowdsec-bouncer.key:/run/secrets/bouncer_key:ro
+      - caddy-logs:/var/log/caddy:ro
+      - crowdsec-db:/var/lib/crowdsec/data
+      - crowdsec-config:/etc/crowdsec
+    networks:
+      - crowdsec
+    labels:
+      io.marineris.system: "true"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  edge: {}
+  docker-api:
+    internal: true
+  ui:
+    internal: true
+  auth:
+    internal: true
+  crowdsec: {}
+  outbound: {}
+  apps:
+    name: ${MARINERIS_APPS_NETWORK:-marineris-apps}
+    internal: true
+
+volumes:
+  caddy-data:
+    labels:
+      io.marineris.system: "true"
+  caddy-config:
+    labels:
+      io.marineris.system: "true"
+  caddy-admin:
+    labels:
+      io.marineris.system: "true"
+  caddy-logs:
+    labels:
+      io.marineris.system: "true"
+  crowdsec-db:
+    labels:
+      io.marineris.system: "true"
+  crowdsec-config:
+    labels:
+      io.marineris.system: "true"

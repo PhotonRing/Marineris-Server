@@ -1,0 +1,5 @@
+# Caddy access logs (JSON), written by Marineris' generated Caddy config.
+filenames:
+  - /var/log/caddy/access.log
+labels:
+  type: caddy

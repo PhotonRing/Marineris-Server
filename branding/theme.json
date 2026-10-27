@@ -1,0 +1,30 @@
+{
+  "name": "Marineris",
+  "default_mode": "dark",
+  "dark": {
+    "bg": "#111214",
+    "surface": "#1a1b1e",
+    "surface-2": "#232428",
+    "border": "#2f3036",
+    "text": "#e9e9ee",
+    "muted": "#9a9ba5",
+    "accent": "#e8743b",
+    "accent-2": "#f2a65a",
+    "ok": "#6cc070",
+    "warn": "#e3b341",
+    "error": "#ef5b4c"
+  },
+  "light": {
+    "bg": "#f6f7f9",
+    "surface": "#ffffff",
+    "surface-2": "#eef0f3",
+    "border": "#dfe2e7",
+    "text": "#1c1d21",
+    "muted": "#636672",
+    "accent": "#d0612a",
+    "accent-2": "#b8741a",
+    "ok": "#2f8a3a",
+    "warn": "#9a6a00",
+    "error": "#c4352a"
+  }
+}

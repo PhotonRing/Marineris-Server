@@ -1,0 +1,26 @@
+{
+  "admin": {
+    "listen": "unix//run/caddy-admin/admin.sock",
+    "config": { "persist": true }
+  },
+  "apps": {
+    "http": {
+      "servers": {
+        "probe": {
+          "listen": [":2020"],
+          "automatic_https": { "disable": true },
+          "routes": [
+            { "handle": [{ "handler": "static_response", "status_code": 200, "body": "ok" }] }
+          ]
+        },
+        "pending": {
+          "listen": [":80"],
+          "automatic_https": { "disable": true },
+          "routes": [
+            { "handle": [{ "handler": "static_response", "status_code": 503, "body": "Marineris: setup pending" }] }
+          ]
+        }
+      }
+    }
+  }
+}

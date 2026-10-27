@@ -1,0 +1,19 @@
+# Secret scanning rules: gitleaks defaults plus project allow-list.
+title = "Marineris gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and documentation placeholders"
+paths = [
+  '''(^|/)testdata/''',
+  '''internal/.*_test\.go$''',
+  '''test/integration/.*_test\.go$''',
+  '''web/package-lock\.json$''',
+  '''test/e2e/package-lock\.json$''',
+]
+regexes = [
+  # argon2id hash of a discarded random value (disabled placeholder user)
+  '''\$argon2id\$v=19\$m=65536,t=3,p=4\$4tq3N6pJ7Hq8yXv2kQ1f0w\$''',
+]

@@ -1,0 +1,39 @@
+version: 2
+# One grouped pull request per ecosystem and month, instead of one per
+# dependency. Security updates are not delayed by this schedule.
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      go:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directories: [/web, /test/e2e]
+    schedule:
+      interval: monthly
+    groups:
+      npm:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directories: [/, /deploy/caddy, /test/integration/pebble]
+    schedule:
+      interval: monthly
+    groups:
+      docker:
+        patterns: ["*"]
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: monthly
+    groups:
+      compose:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

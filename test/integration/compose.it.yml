@@ -1,0 +1,39 @@
+# Overlay for integration tests: adds a test ACME CA (Pebble) whose DNS
+# (challtestsrv) points every name at Caddy, and a demo upstream.
+#   docker compose -f deploy/compose.yml -f test/integration/compose.it.yml up -d
+services:
+  caddy:
+    networks:
+      edge:
+        ipv4_address: 172.30.0.10
+    volumes:
+      - ${IT_CERTS}:/it-certs:ro
+
+  pebble:
+    # Built by run.sh from test/integration/pebble.
+    image: marineris-it-pebble:dev
+    container_name: marineris-it-pebble
+    command: ["pebble", "-config", "/certs/pebble.json", "-dnsserver", "challtestsrv:8053"]
+    environment:
+      PEBBLE_VA_NOSLEEP: "1"
+      PEBBLE_WFE_NONCEREJECT: "0"
+      PEBBLE_AUTHZREUSE: "0"
+    volumes:
+      - ${IT_CERTS}:/certs:ro
+    networks:
+      - edge
+
+  challtestsrv:
+    image: marineris-it-pebble:dev
+    container_name: marineris-it-challtestsrv
+    command: ["pebble-challtestsrv", "-defaultIPv4", "172.30.0.10", "-defaultIPv6", "", "-dnsserver", ":8053", "-http01", "", "-https01", "", "-tlsalpn01", "", "-doh", ""]
+    depends_on:
+      - pebble
+    networks:
+      - edge
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

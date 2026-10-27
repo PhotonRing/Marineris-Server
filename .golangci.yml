@@ -1,0 +1,50 @@
+version: "2"
+
+run:
+  timeout: 10m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - gosec
+    - bodyclose
+    - errorlint
+    - misspell
+    - nilerr
+    - noctx
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - revive
+  settings:
+    gosec:
+      excludes:
+        # G104 (unchecked errors) is covered by errcheck.
+        - G104
+    misspell:
+      ignore-rules:
+        - marineris
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      # Tests use fixed inputs and throw-away servers.
+      - path: _test\.go
+        linters: [gosec, noctx, bodyclose]
+      - path: test/
+        linters: [gosec, noctx, bodyclose]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/photonring/marineris-server
