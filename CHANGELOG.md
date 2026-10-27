@@ -12,6 +12,11 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+### Added
+
+- **Online demo** on GitHub Pages, published with every release: the real web
+  UI with sample data and an in-browser backend.
+
 ## [0.1.0] - 2026-10-27
 
 First public version: Phase 1.

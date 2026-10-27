@@ -1,6 +1,10 @@
 // Thin client for the Marineris API. It carries the CSRF token, turns error
 // responses into ApiError and transparently asks for a step-up confirmation
 // when an action needs a recent login.
+//
+// The static demo (VITE_DEMO=1) answers from an in-browser backend instead of
+// the network; that code is not part of the normal build.
+const demo = import.meta.env.VITE_DEMO === '1' ? import('../demo/backend.js') : null;
 
 let csrf = '';
 let stepUpHandler = null;
@@ -27,7 +31,8 @@ export class ApiError extends Error {
   }
 }
 
-export async function api(method, path, body, { raw = false, retry = true } = {}) {
+async function send(method, path, body, raw) {
+  if (demo) return (await demo).handle(method, path, raw && body ? JSON.parse(body) : body);
   const opts = { method, headers: {}, credentials: 'same-origin' };
   if (body !== undefined && body !== null) {
     opts.headers['Content-Type'] = 'application/json';
@@ -42,8 +47,13 @@ export async function api(method, path, body, { raw = false, retry = true } = {}
   } catch {
     data = { error: text };
   }
-  if (!res.ok) {
-    const err = new ApiError(res.status, data);
+  return { ok: res.ok, status: res.status, data };
+}
+
+export async function api(method, path, body, { raw = false, retry = true } = {}) {
+  const { ok, status, data } = await send(method, path, body, raw);
+  if (!ok) {
+    const err = new ApiError(status, data);
     if (err.code === 'reauth_required' && retry && stepUpHandler) {
       if (await stepUpHandler()) return api(method, path, body, { raw, retry: false });
     }
@@ -52,6 +62,13 @@ export async function api(method, path, body, { raw = false, retry = true } = {}
   }
   if (data && typeof data === 'object' && data.csrf_token) csrf = data.csrf_token;
   return data;
+}
+
+// Address of a route's hub icon (cache-busted).
+let demoBackend = null;
+if (demo) demo.then((m) => (demoBackend = m));
+export function iconURL(id) {
+  return demo ? demoBackend?.iconURL(id) || '' : `/api/hub/icons/${id}?t=${Date.now()}`;
 }
 
 export const get = (p) => api('GET', p);

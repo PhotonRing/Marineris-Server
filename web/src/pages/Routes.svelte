@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { get, post, put, del, describe } from '../lib/api.js';
+  import { get, post, put, del, describe, iconURL } from '../lib/api.js';
   import { toast } from '../lib/state.svelte.js';
   import { link } from '../lib/router.js';
   import Modal from '../components/Modal.svelte';
@@ -353,7 +353,7 @@
       <div class="field">
         <label for="hbi">Icon</label>
         <div class="row">
-          {#if form.has_icon && form.id}<img class="tile-icon" src={`/api/hub/icons/${form.id}?t=${Date.now()}`} alt="Current icon" />{/if}
+          {#if form.has_icon && form.id}<img class="tile-icon" src={iconURL(form.id)} alt="Current icon" />{/if}
           <select id="hbi" bind:value={form.icon_mode}>
             <option value="keep">{form.has_icon ? 'Keep the current icon' : 'Initials (no icon)'}</option>
             <option value="name">By name (dashboard-icons)</option>

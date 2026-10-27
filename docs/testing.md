@@ -27,6 +27,7 @@ There are three workflows, and only one of them tests code:
 | `ci.yml` | each push to a pull request; weekly; from the release | every test and scan below |
 | `release.yml` | when `CHANGELOG.md` changes on `main` | if there is a new version: `ci.yml`, then signed multi-arch images, tag and GitHub release |
 | `housekeeping.yml` | when a pull request closes; monthly | deletes merged branches and runs older than 30 days |
+| `pages.yml` | from the release; by hand | publishes the online demo on GitHub Pages |
 
 To keep the answer on a pull request quick:
 
@@ -47,6 +48,15 @@ To keep the answer on a pull request quick:
   target, which is also the code-scanning baseline.
 
 Before pushing, `make lint test` catches most failures locally.
+
+## Online demo
+
+The demo on GitHub Pages is the real web UI built with `VITE_DEMO=1`
+(`npm run build:demo` in `web/`): its API calls are answered in the browser
+by `web/src/demo/backend.js`, from sample data shaped like real responses
+(`web/src/demo/data.js`). None of it is in the normal build. The browser
+tests in `test/e2e/demo` (`npx playwright test -c playwright.demo.config.js`)
+run in the CI with the other end-to-end tests.
 
 ## Operational checks (runbooks)
 

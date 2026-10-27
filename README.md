@@ -48,6 +48,13 @@
   proxy. Every container non-root, read-only, all capabilities dropped.
   Break-glass access over SSH.
 
+## Online demo
+
+**[Try the web UI in your browser](https://photonring.github.io/Marineris-Server/)**:
+the real interface with sample data, answered by your browser itself (nothing
+is sent anywhere, changes are lost when you reload). It is published with
+every release.
+
 ## Try it on your computer
 
 The whole stack (Marineris, Caddy, Authelia, CrowdSec, socket proxy) runs on
