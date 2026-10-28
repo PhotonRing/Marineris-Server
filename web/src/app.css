@@ -796,3 +796,116 @@ dialog::backdrop {
   object-fit: cover;
   padding: 0;
 }
+
+/* Stacks --------------------------------------------------------------------- */
+.app-icon {
+  flex: none;
+  border-radius: 22%;
+  object-fit: contain;
+}
+.app-icon.tile-initials {
+  display: inline-grid;
+  place-items: center;
+  font-weight: 700;
+}
+.file-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 0.75rem;
+}
+.stack-link {
+  color: var(--text);
+}
+.stack-link:hover {
+  text-decoration: none;
+}
+.stack-link:hover strong {
+  color: var(--accent-2);
+}
+.no-margin {
+  margin: 0;
+}
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.35rem;
+  background: var(--muted);
+  flex: none;
+}
+.dot.ok {
+  background: var(--ok);
+}
+.dot.warn {
+  background: var(--warn);
+}
+.dot.error {
+  background: var(--error);
+}
+.stack-layout {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.service-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+}
+.service-item {
+  justify-content: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: transparent;
+  border-color: transparent;
+  text-align: left;
+  font-weight: 500;
+}
+.service-item.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.service-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.service-name {
+  font-weight: 600;
+}
+.service-image {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.service-panel h4 {
+  margin: 1.2rem 0 0.5rem;
+}
+textarea.code.tall {
+  min-height: 26rem;
+}
+pre.logs {
+  max-height: 32rem;
+  white-space: pre-wrap;
+}
+.list-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+.list-editor > .row {
+  width: 100%;
+}
+.row.nowrap > input.env-key {
+  flex: 0 1 14rem;
+}
+@media (max-width: 860px) {
+  .stack-layout {
+    grid-template-columns: 1fr;
+  }
+}

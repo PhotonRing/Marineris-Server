@@ -12,6 +12,7 @@
   import { get } from './lib/api.js';
   import Containers from './pages/Containers.svelte';
   import Stacks from './pages/Stacks.svelte';
+  import StackDetail from './pages/StackDetail.svelte';
   import Storage from './pages/Storage.svelte';
   import Routes from './pages/Routes.svelte';
   import Domains from './pages/Domains.svelte';
@@ -39,9 +40,12 @@
     { path: '/account', label: 'Account', icon: '☺', component: Account },
   ];
 
-  // "/" shows the page chosen in Settings → Home page.
+  // "/" shows the page chosen in Settings → Home page. /stacks/<name> is the
+  // page of one stack (highlighted as Stacks in the menu).
   let current = $derived(
-    pages.find((p) => p.path === ($path === '/' ? (app.home === 'dashboard' ? '/dashboard' : '/hub') : $path)) || pages[0],
+    $path.startsWith('/stacks/')
+      ? { path: $path, nav: '/stacks', label: 'Stacks', component: StackDetail }
+      : pages.find((p) => p.path === ($path === '/' ? (app.home === 'dashboard' ? '/dashboard' : '/hub') : $path)) || pages[0],
   );
 
   $effect(() => {
@@ -109,7 +113,7 @@
           {#if p.section}
             <div class="section">{p.section}</div>
           {:else}
-            <a href={p.path} use:link class:active={current === p}><span aria-hidden="true">{p.icon}</span>{p.label}</a>
+            <a href={p.path} use:link class:active={(current.nav || current.path) === p.path}><span aria-hidden="true">{p.icon}</span>{p.label}</a>
           {/if}
         {/each}
       </nav>

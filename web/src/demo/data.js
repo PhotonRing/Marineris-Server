@@ -11,6 +11,7 @@ const id = (n) => n.toString(16).padStart(8, '0').repeat(8);
 // Sample app icons drawn here, so that the demo loads nothing from elsewhere.
 const svg = (body) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${body}</svg>`);
 const MEDIA_ICON = svg('<rect width="64" height="64" rx="14" fill="#5b3fd1"/><path d="M25 19v26l21-13z" fill="#fff"/>');
+const REQUESTS_ICON = svg('<rect width="64" height="64" rx="14" fill="#c2410c"/><circle cx="28" cy="28" r="12" fill="none" stroke="#fff" stroke-width="5"/><path d="M37 37l12 12" stroke="#fff" stroke-width="6" stroke-linecap="round"/>');
 const MONITOR_ICON = svg('<rect width="64" height="64" rx="14" fill="#1f9d63"/><path d="M10 34h11l5-12 8 22 6-14 4 4h10" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>');
 
 function container(n, name, image, extra = {}) {
@@ -34,13 +35,14 @@ function container(n, name, image, extra = {}) {
 export function seed() {
   const admin = { id: 1, username: 'admin', role: 'admin', created_at: ago(43200), updated_at: ago(43200) };
   const containers = [
-    container(1, 'marineris', 'ghcr.io/photonring/marineris:0.1.0', { health: 'healthy', status: 'Up 3 days (healthy)', ports: [8080, 8081], stack: 'marineris', networks: ['marineris_auth', 'marineris_docker-api', 'marineris_outbound', 'marineris_ui'], system: true }),
-    container(2, 'marineris-caddy', 'ghcr.io/photonring/marineris-caddy:0.1.0', { ports: [80, 443, 2019], stack: 'marineris', networks: ['marineris-apps', 'marineris_auth', 'marineris_crowdsec', 'marineris_edge', 'marineris_ui'], system: true }),
-    container(3, 'marineris-authelia', 'authelia/authelia:4.39.28', { health: 'healthy', status: 'Up 3 days (healthy)', ports: [9091], stack: 'marineris', networks: ['marineris_auth'], system: true }),
-    container(4, 'marineris-crowdsec', 'crowdsecurity/crowdsec:v1.8.1', { ports: [6060, 8080], stack: 'marineris', networks: ['marineris_crowdsec'], system: true }),
-    container(5, 'marineris-socket-proxy', 'wollomatic/socket-proxy:1', { ports: [2375], stack: 'marineris', networks: ['marineris_docker-api'], system: true }),
-    container(6, 'jellyfin', 'jellyfin/jellyfin:10.11', { status: 'Up 2 days', ports: [8096, 8920], stack: 'media', networks: ['marineris-apps', 'media_default'], routable: true }),
-    container(7, 'uptime-kuma', 'louislam/uptime-kuma:2', { health: 'healthy', status: 'Up 2 days (healthy)', ports: [3001], stack: 'monitoring', networks: ['marineris-apps', 'monitoring_default'], routable: true }),
+    container(1, 'marineris', 'ghcr.io/photonring/marineris:0.1.0', { health: 'healthy', status: 'Up 3 days (healthy)', ports: [8080, 8081], stack: 'marineris', service: 'marineris', networks: ['marineris_auth', 'marineris_docker-api', 'marineris_outbound', 'marineris_ui'], system: true }),
+    container(2, 'marineris-caddy', 'ghcr.io/photonring/marineris-caddy:0.1.0', { ports: [80, 443, 2019], stack: 'marineris', service: 'caddy', networks: ['marineris-apps', 'marineris_auth', 'marineris_crowdsec', 'marineris_edge', 'marineris_ui'], system: true }),
+    container(3, 'marineris-authelia', 'authelia/authelia:4.39.28', { health: 'healthy', status: 'Up 3 days (healthy)', ports: [9091], stack: 'marineris', service: 'authelia', networks: ['marineris_auth'], system: true }),
+    container(4, 'marineris-crowdsec', 'crowdsecurity/crowdsec:v1.8.1', { ports: [6060, 8080], stack: 'marineris', service: 'crowdsec', networks: ['marineris_crowdsec'], system: true }),
+    container(5, 'marineris-socket-proxy', 'wollomatic/socket-proxy:1', { ports: [2375], stack: 'marineris', service: 'socket-proxy', networks: ['marineris_docker-api'], system: true }),
+    container(6, 'jellyfin', 'jellyfin/jellyfin:10.11', { status: 'Up 2 days', ports: [8096, 8920], stack: 'media', service: 'jellyfin', networks: ['marineris-apps', 'media_default'], routable: true }),
+    container(9, 'jellyseerr', 'fallenbagel/jellyseerr:2', { status: 'Up 2 days', ports: [5055], stack: 'media', service: 'jellyseerr', networks: ['media_default'] }),
+    container(7, 'uptime-kuma', 'louislam/uptime-kuma:2', { health: 'healthy', status: 'Up 2 days (healthy)', ports: [3001], stack: 'monitoring', service: 'uptime-kuma', networks: ['marineris-apps', 'monitoring_default'], routable: true }),
     container(8, 'whoami', 'traefik/whoami:v1.11', { state: 'exited', status: 'Exited (0) 5 hours ago', ports: [80], networks: ['marineris-apps'], routable: true }),
   ];
   const route = (rid, name, host, kind, target, auth, hub, minutes) => ({
@@ -80,6 +82,7 @@ export function seed() {
       { id: 2, name: 'valles.example', dns_profile_id: null, wildcard: false, created_at: ago(1600), updated_at: ago(1600) },
     ],
     routes,
+    serviceIcons: new Map([['media/jellyseerr', REQUESTS_ICON]]),
     icons: new Map([
       [1, MEDIA_ICON],
       [2, MONITOR_ICON],
@@ -88,11 +91,11 @@ export function seed() {
     stacks: [
       {
         name: 'media', unsafe_ack: false, created_at: ago(3100), updated_at: ago(3100), deployed_at: ago(2950), env: 'TZ=Europe/Paris\n',
-        compose: 'services:\n  jellyfin:\n    image: jellyfin/jellyfin:10.11\n    container_name: jellyfin\n    environment:\n      TZ: ${TZ}\n    volumes:\n      - config:/config\n      - /srv/media:/media:ro\n    networks: [default, apps]\n    restart: unless-stopped\nvolumes:\n  config: {}\nnetworks:\n  apps:\n    external: true\n    name: marineris-apps\n',
+        compose: '# Films and series, and a request page for the family.\nservices:\n  jellyfin:\n    image: jellyfin/jellyfin:10.11\n    container_name: jellyfin\n    restart: unless-stopped\n    environment:\n      TZ: ${TZ}\n      JELLYFIN_PublishedServerUrl: "https://media.mars.example"\n    volumes:\n      - config:/config\n      - /srv/media:/media:ro\n    networks:\n      - default\n      - apps\n    labels:\n      io.marineris.main: "true"\n  jellyseerr:\n    image: fallenbagel/jellyseerr:2\n    container_name: jellyseerr\n    restart: unless-stopped\n    environment:\n      TZ: ${TZ}\n      LOG_LEVEL: info\n    volumes:\n      - requests:/app/config\nvolumes:\n  config: {}\n  requests: {}\nnetworks:\n  apps:\n    external: true\n    name: marineris-apps\n',
       },
       {
         name: 'monitoring', unsafe_ack: false, created_at: ago(2850), updated_at: ago(2850), deployed_at: ago(2840), env: '',
-        compose: 'services:\n  uptime-kuma:\n    image: louislam/uptime-kuma:2\n    container_name: uptime-kuma\n    volumes:\n      - data:/app/data\n    networks: [default, apps]\n    restart: unless-stopped\nvolumes:\n  data: {}\nnetworks:\n  apps:\n    external: true\n    name: marineris-apps\n',
+        compose: 'services:\n  uptime-kuma:\n    image: louislam/uptime-kuma:2\n    container_name: uptime-kuma\n    restart: unless-stopped\n    volumes:\n      - data:/app/data\n    networks:\n      - default\n      - apps\nvolumes:\n  data: {}\nnetworks:\n  apps:\n    external: true\n    name: marineris-apps\n',
       },
     ],
     volumes: [
@@ -100,6 +103,7 @@ export function seed() {
         name: 'marineris_' + v, driver: 'local', mountpoint: `/var/lib/docker/volumes/marineris_${v}/_data`, created_at: ago(4400), stack: 'marineris', system: true,
       })),
       { name: 'media_config', driver: 'local', mountpoint: '/var/lib/docker/volumes/media_config/_data', created_at: ago(2950), stack: 'media', system: false },
+      { name: 'media_requests', driver: 'local', mountpoint: '/var/lib/docker/volumes/media_requests/_data', created_at: ago(2950), stack: 'media', system: false },
       { name: 'monitoring_data', driver: 'local', mountpoint: '/var/lib/docker/volumes/monitoring_data/_data', created_at: ago(2840), stack: 'monitoring', system: false },
       { name: 'old_backup', driver: 'local', mountpoint: '/var/lib/docker/volumes/old_backup/_data', created_at: ago(9000), system: false },
     ],

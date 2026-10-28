@@ -66,3 +66,59 @@ test('sign out and sign in again (any password, any code)', async ({ page }) => 
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { level: 2, name: 'Marineris' })).toBeVisible();
 });
+
+test('the hub fills the window without scrolling under the demo banner', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto('./');
+  await expect(page.getByText('Jellyfin')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(1080);
+  // The background layer covers the whole width, not only the main column.
+  const bg = await page.evaluate(() => {
+    const s = getComputedStyle(document.querySelector('.shell'), '::before');
+    return { image: s.backgroundImage, left: s.left, right: s.right };
+  });
+  expect(bg.image).toContain('background.webp');
+  expect([bg.left, bg.right]).toEqual(['0px', '0px']);
+});
+
+test('a stack: services with status and icons, editing a service, actions', async ({ page }) => {
+  const problems = watch(page);
+  await page.goto('./#/stacks');
+  await page.getByRole('link', { name: /media/ }).click();
+  const services = page.getByRole('navigation', { name: 'Services' });
+  await expect(services.getByRole('button', { name: /jellyfin/ })).toBeVisible();
+  await expect(services.getByRole('button', { name: /jellyseerr/ })).toBeVisible();
+  // Edit an environment variable and recreate the service.
+  await page.getByRole('tab', { name: 'Environment' }).click();
+  await page.getByLabel('Variable 2 value').fill('https://films.mars.example');
+  await page.getByRole('button', { name: 'Save & recreate' }).click();
+  await expect(page.getByText('jellyfin saved and recreated')).toBeVisible();
+  await services.getByRole('button', { name: /compose\.yaml/ }).click();
+  await expect(page.getByLabel('compose.yaml')).toHaveValue(/JELLYFIN_PublishedServerUrl: "https:\/\/films\.mars\.example"/);
+  await expect(page.getByLabel('compose.yaml')).toHaveValue(/jellyseerr:\n {4}image: fallenbagel/);
+  // Stopping one service leaves the stack partly running.
+  await services.getByRole('button', { name: /jellyseerr/ }).click();
+  await page.getByRole('button', { name: 'Stop', exact: true }).last().click();
+  await expect(page.getByText('partly running')).toBeVisible();
+  await page.getByRole('tab', { name: 'Terminal' }).click();
+  await expect(page.getByText('Coming in Phase 3.')).toBeVisible();
+  // The policy applies to edits too.
+  await page.getByRole('tab', { name: 'Mounts' }).click();
+  await page.getByRole('button', { name: '+ Add mount' }).click();
+  await page.getByLabel('config:/config 2').fill('/var/run/docker.sock:/var/run/docker.sock');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText(/security policy/)).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
+test('branding from the settings', async ({ page }) => {
+  await page.goto('./#/settings');
+  await page.getByLabel('Name', { exact: true }).fill('Olympus');
+  await page.getByLabel('Accent colour (hex)').fill('#3b82f6');
+  await page.getByRole('button', { name: 'Save branding' }).click();
+  await expect(page.locator('.brand-name')).toHaveText('Olympus');
+  await expect(page).toHaveTitle('Olympus');
+  await page.getByLabel('Accent colour (hex)').fill('blue');
+  await page.getByRole('button', { name: 'Save branding' }).click();
+  await expect(page.getByText(/must be a colour/)).toBeVisible();
+});

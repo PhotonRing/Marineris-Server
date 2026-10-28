@@ -13,7 +13,7 @@ const base = demo ? process.env.VITE_DEMO_BASE || '/Marineris-Server/' : '/';
 // The branding is served by the Go server at /branding; the demo ships a copy
 // of it under its sub-path.
 function demoBranding() {
-  const src = path.resolve(__dirname, '../branding');
+  const src = path.resolve(import.meta.dirname, '../branding');
   const rewrite = (code) => code.replaceAll('/branding/', `${base}branding/`);
   return {
     name: 'marineris-demo-branding',

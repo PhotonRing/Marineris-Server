@@ -92,6 +92,34 @@ test('passkey registration and passwordless login', async ({ page, context }) =>
   await expect(page.getByRole('link', { name: 'Hub', exact: true })).toBeVisible();
 });
 
+test('branding: name, accent colour and header icon from the settings', async ({ page }) => {
+  const problems = watchConsole(page);
+  await login(page, 1);
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Olympus');
+  await page.getByLabel('Accent colour (hex)').fill('#3b82f6');
+  await page.getByRole('button', { name: 'Save branding' }).click();
+  await expect(page.locator('.brand-name')).toHaveText('Olympus');
+  await expect(page).toHaveTitle('Olympus');
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())).toBe('#3b82f6');
+  // A 1×1 PNG as the header icon: served by Marineris, shown in the sidebar.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await page.locator('.brand-image').filter({ hasText: 'Header icon' }).locator('input[type=file]').setInputFiles({ name: 'icon.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('.sidebar .brand img')).toHaveAttribute('src', /^\/api\/branding\/logo\?v=/);
+  // The login page uses it too.
+  await page.getByRole('button', { name: 'Log out', exact: true }).click();
+  await expect(page.locator('.auth-brand')).toContainText('Olympus');
+  // Back to the defaults for the other tests.
+  await login(page, 2);
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.locator('.brand-image').filter({ hasText: 'Header icon' }).getByRole('button', { name: 'Use default' }).click();
+  await page.getByLabel('Name', { exact: true }).fill('');
+  await page.getByRole('button', { name: 'Default', exact: true }).click();
+  await page.getByRole('button', { name: 'Save branding' }).click();
+  await expect(page.locator('.sidebar .wordmark')).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
 test('session cookie is hardened', async ({ page, context }) => {
   await login(page, 1);
   const cookie = (await context.cookies()).find((c) => c.name === '__Host-marineris_session');
