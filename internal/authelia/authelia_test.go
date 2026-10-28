@@ -174,6 +174,8 @@ func TestAutheliaValidateConfig(t *testing.T) {
 			}
 			_ = os.WriteFile(filepath.Join(dir, "configuration.yml"), cfg, 0o644)
 			_ = os.WriteFile(filepath.Join(dir, "users_database.yml"), users, 0o644)
+			// Marineris writes the portal's logo and favicon here (asset_path).
+			_ = os.Mkdir(filepath.Join(dir, "assets"), 0o755)
 			sec := filepath.Join(dir, "secrets")
 			_ = os.Mkdir(sec, 0o755)
 			for _, f := range []string{"jwt", "session", "storage"} {
