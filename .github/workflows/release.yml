@@ -8,6 +8,10 @@ name: Release
 # release (notes taken from that section), publishes the demo site (GitHub
 # Pages) and deletes merged branches.
 # It only starts when CHANGELOG.md changes (or by hand, e.g. to retry).
+
+# Runners: the project's self-hosted runner, except for pull requests from
+# forks (GitHub's runners). See docs/runbooks/ci-runner.md.
+
 on:
   push:
     branches: [main]
@@ -24,7 +28,7 @@ concurrency:
 jobs:
   version:
     name: Is there a version to release?
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     outputs:
       tag: ${{ steps.v.outputs.tag }}
       release: ${{ steps.v.outputs.release }}
@@ -67,7 +71,7 @@ jobs:
   images:
     name: Publish signed images
     needs: [version, checks]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -146,7 +150,7 @@ jobs:
   release:
     name: Tag and GitHub release
     needs: [version, images]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     permissions:
       contents: write
     steps:
@@ -185,7 +189,7 @@ jobs:
   cleanup-branches:
     name: Keep only main
     needs: release
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     permissions:
       contents: write # delete merged branches
       pull-requests: read

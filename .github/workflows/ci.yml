@@ -9,6 +9,13 @@ name: CI
 # Jobs only run when the files they test changed (scripts/changed-areas.sh).
 # The images are built once, in the "images" job, and shared with the jobs
 # that test them. Multi-arch images are built by the release workflow only.
+
+# Runners: jobs run on the project's self-hosted runner, except for pull
+# requests from forks (anyone's code: GitHub's runners) and the integration
+# test (it runs the stack under its real names and ports, which would clash
+# with a Marineris installed on the runner's server). See
+# docs/runbooks/ci-runner.md.
+
 on:
   pull_request:
     paths-ignore:
@@ -38,7 +45,7 @@ env:
 jobs:
   changes:
     name: What changed
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 5
     outputs:
       go: ${{ steps.areas.outputs.go }}
@@ -65,7 +72,7 @@ jobs:
   lint:
     name: Lint
     needs: changes
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -115,7 +122,7 @@ jobs:
   secrets:
     name: Secret scanning (gitleaks, full history)
     needs: changes
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -134,7 +141,7 @@ jobs:
     name: Unit & security tests
     needs: changes
     if: needs.changes.outputs.go == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -154,7 +161,7 @@ jobs:
     name: Vulnerable dependencies (govulncheck, npm audit)
     needs: changes
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.e2e == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -178,7 +185,7 @@ jobs:
     name: CodeQL
     needs: changes
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -208,7 +215,7 @@ jobs:
     name: Browser end-to-end (Playwright)
     needs: changes
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.e2e == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -228,7 +235,13 @@ jobs:
         working-directory: test/e2e
         run: |
           npm ci --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          # Browser libraries need apt (sudo): installed on GitHub's runners,
+          # once by hand on the self-hosted one (docs/runbooks/ci-runner.md).
+          if [ "$RUNNER_ENVIRONMENT" = github-hosted ]; then
+            npx playwright install --with-deps chromium
+          else
+            npx playwright install chromium
+          fi
           npx playwright test
       - name: Build and test the static demo (GitHub Pages)
         run: |
@@ -244,7 +257,7 @@ jobs:
     name: OWASP ZAP baseline
     needs: changes
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -261,7 +274,10 @@ jobs:
           (cd web && npm ci --no-audit --no-fund && npm run build)
           go build -o bin/marineris ./cmd/marineris
           mkdir -p "$RUNNER_TEMP/data"
-          MARINERIS_DATA_DIR="$RUNNER_TEMP/data" MARINERIS_LOCAL_ADDR=0.0.0.0:18181 MARINERIS_EDGE_ADDR=0.0.0.0:18180 \
+          # Loopback only: on a self-hosted runner, 0.0.0.0 would expose the
+          # test instance (setup page included) to the server's network. ZAP
+          # shares the host network.
+          MARINERIS_DATA_DIR="$RUNNER_TEMP/data" MARINERIS_LOCAL_ADDR=127.0.0.1:18181 MARINERIS_EDGE_ADDR=127.0.0.1:18180 \
           MARINERIS_DOCKER_HOST=tcp://127.0.0.1:1 MARINERIS_CADDY_ADMIN=http://127.0.0.1:2 \
             nohup bin/marineris serve > "$RUNNER_TEMP/marineris.log" 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:18181/api/health && break; sleep 1; done
@@ -292,7 +308,7 @@ jobs:
     name: Build images
     needs: changes
     if: needs.changes.outputs.images == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -335,6 +351,8 @@ jobs:
     name: Integration (real stack, Pebble ACME, CrowdSec)
     needs: [changes, images]
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.caddy == 'true' || needs.changes.outputs.deploy == 'true'
+    # Always on GitHub's runners: the stack takes the names, ports 80/443 and
+    # volumes of a real installation, and is deleted afterwards.
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -365,7 +383,7 @@ jobs:
     name: Generated configs vs. real Caddy & Authelia
     needs: [changes, images]
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.caddy == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -389,7 +407,7 @@ jobs:
   trivy:
     name: Image & configuration scan (Trivy)
     needs: [changes, images]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -406,7 +424,10 @@ jobs:
           f="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/$f"
           echo "$TRIVY_SHA256  $f" | sha256sum -c -
-          tar -xzf "$f" trivy && sudo install -m 0755 trivy /usr/local/bin/trivy && rm -f trivy "$f"
+          # In the job's temporary folder: no sudo, nothing left on the runner.
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$f" -C "$RUNNER_TEMP/bin" trivy && rm -f "$f"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Scan images (fail on fixable HIGH/CRITICAL)
         run: |
           for img in marineris marineris-caddy; do
@@ -420,7 +441,7 @@ jobs:
   fuzz:
     name: Extended fuzzing
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
