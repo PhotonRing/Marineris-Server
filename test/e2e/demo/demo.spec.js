@@ -248,5 +248,5 @@ test('route icons follow their service; a route icon of its own can be undone', 
   await expect(page.getByText('Icon updated')).toBeVisible();
   await page.getByRole('link', { name: 'Hub', exact: true }).click();
   await expect(page.getByRole('link', { name: /^Jellyfin/ }).locator('img')).toHaveAttribute('src', 'https://example.com/new-jellyfin.png');
-  expect(problems.filter((p) => !p.includes('example.com'))).toEqual([]);
+  expect(problems).toEqual([]);
 });
