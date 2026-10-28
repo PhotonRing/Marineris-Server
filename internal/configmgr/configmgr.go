@@ -341,6 +341,17 @@ func writePublic(path string, data []byte) error {
 	return secrets.WriteFileAtomic(path, data, 0o640, false)
 }
 
+// clearCandidate deletes the files of Authelia's candidate directory, but
+// not the directory itself.
+func clearCandidate(cand string) error {
+	for _, f := range []string{autheliaConfigFile, autheliaUsersFile} {
+		if err := os.Remove(filepath.Join(cand, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
 type autheliaBundle struct {
 	Config []byte `json:"config"`
 	Users  []byte `json:"users"`
@@ -372,18 +383,20 @@ func (m *Manager) applyAutheliaLocked(ctx context.Context, actor, reason string,
 		return nil
 	}
 
-	// Validate the candidate with the real Authelia binary.
+	// Validate the candidate with the real Authelia binary. The candidate
+	// directory is kept and only its files are replaced: Docker Desktop (WSL)
+	// cannot bind-mount a directory deleted and created again at the same path.
 	cand := filepath.Join(dir, ".candidate")
-	if err := os.RemoveAll(cand); err != nil {
+	if err := clearCandidate(cand); err != nil {
 		return err
 	}
+	defer func() { _ = clearCandidate(cand) }()
 	if err := writePublic(filepath.Join(cand, autheliaConfigFile), cfg); err != nil {
 		return err
 	}
 	if err := writePublic(filepath.Join(cand, autheliaUsersFile), users); err != nil {
 		return err
 	}
-	defer os.RemoveAll(cand)
 	code, out, err := m.docker.Run(ctx, docker.RunSpec{
 		Image: m.cfg.AutheliaImage,
 		// Same UID as Marineris and Authelia: the files are not readable by

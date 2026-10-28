@@ -18,6 +18,15 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-28
+
+Fixes for running Marineris with Docker Desktop on Windows (WSL 2), and for
+the demo.
+
+**Upgrading from 0.1.3:** in `.env`, set `MARINERIS_IMAGE` and
+`MARINERIS_CADDY_IMAGE` to the `0.1.4` tags, then
+`docker compose pull && docker compose up -d`. Nothing else changes.
+
 ### Fixed
 
 - **`deploy/demo/demo.sh up` on Windows (WSL 2).** When Docker Desktop's
@@ -30,6 +39,15 @@ the list of commits and the image digests — then deletes merged branches.
   the missing key as a directory when compose created the CrowdSec
   container. The demo now prepares the data directory before starting the
   stack.
+- **Authelia changes failing with Docker Desktop.** Applying Authelia's
+  configuration failed with `error while creating mount source path …: file
+  exists`, then Authelia could not restart (`error mounting … to rootfs at
+  "/config"`). Docker Desktop cannot bind-mount a folder deleted and created
+  again at the same path: Marineris now keeps the folder it validates
+  Authelia's configuration in, and each demo started with `demo.sh up` gets
+  a data folder of its own.
+- **Settings: errors show next to the Save button**, instead of at the top
+  of the page, out of sight.
 
 ## [0.1.3] - 2026-10-28
 
@@ -213,7 +231,8 @@ First public version: Phase 1.
   the real stack with a test ACME CA, gitleaks, govulncheck, Trivy, CodeQL,
   OWASP ZAP; multi-arch signed images with SBOM and provenance.
 
-[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.0...v0.1.1

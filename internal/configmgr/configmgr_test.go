@@ -277,8 +277,14 @@ func TestApplyAutheliaInvalidKeepsFiles(t *testing.T) {
 	if !bytes.Equal(before, after) || fd.restarts != 0 {
 		t.Fatal("invalid config installed")
 	}
-	if _, err := os.Stat(filepath.Join(m.cfg.AutheliaDir(), ".candidate")); !os.IsNotExist(err) {
-		t.Fatal("candidate directory left behind")
+	// The directory stays (Docker Desktop cannot mount it again once
+	// deleted), its files do not.
+	cand := filepath.Join(m.cfg.AutheliaDir(), ".candidate")
+	if st, err := os.Stat(cand); err != nil || !st.IsDir() {
+		t.Fatalf("candidate directory deleted: %v", err)
+	}
+	if entries, _ := os.ReadDir(cand); len(entries) != 0 {
+		t.Fatalf("candidate files left behind: %v", entries)
 	}
 }
 

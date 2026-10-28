@@ -74,7 +74,6 @@
   {#if error}<div class="alert error">{error}</div>{:else}<p class="muted">Loading…</p>{/if}
 {:else}
   <form class="stack" onsubmit={save}>
-    {#if error}<div class="alert error">{error}</div>{/if}
     <div class="card">
       <h2>Certificates</h2>
       <div class="field">
@@ -166,6 +165,8 @@
         </div>
       </div>
     </div>
+    <!-- Next to the button: the form is longer than the screen. -->
+    {#if error}<div class="alert error" role="alert">{error}</div>{/if}
     <div class="row end">
       <button class="primary" type="submit" disabled={busy}>{busy ? 'Applying…' : 'Save & apply'}</button>
     </div>
