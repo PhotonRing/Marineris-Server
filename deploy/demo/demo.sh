@@ -144,7 +144,7 @@ Marineris is running on this computer.
    - Domains: add  marineris.localhost  (no DNS profile)
    - Settings: public UI host  marineris.localhost
    - Routes: add  hello.marineris.localhost  -> container demo-hello,
-     port 8000, protected by Authelia
+     port 80, protected by Authelia
 
 3. Open https://hello.marineris.localhost (and https://marineris.localhost).
    Certificates come from Caddy's local CA: the browser warns once per

@@ -18,6 +18,15 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Routes: any port can be typed.** When a container's image declared
+  several ports, the route form only offered those in a list, so an app
+  listening on another port could not be published. The port is now a field
+  with the declared ports as suggestions.
+- **Demo:** the example app listens on port 80, which its image declares,
+  instead of 8000, which the route form did not offer.
+
 ## [0.1.4] - 2026-10-28
 
 Fixes for running Marineris with Docker Desktop on Windows (WSL 2), and for
