@@ -112,6 +112,8 @@ test('a stack: services with status and icons, editing a service, actions', asyn
   await page.getByLabel('Mount 2 path in the container').fill('/var/run/docker.sock');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText(/security policy/)).toBeVisible();
+  // A refused change stays in the form, to be corrected.
+  await expect(page.getByLabel('Mount 2 host folder')).toHaveValue('/var/run/docker.sock');
   expect(problems).toEqual([]);
 });
 

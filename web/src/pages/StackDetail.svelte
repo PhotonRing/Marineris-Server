@@ -224,16 +224,22 @@
     if (!long.has('volumes')) {
       body.mounts = form.mounts.map((m) => ({ type: m.type, source: m.source.trim(), target: m.target.trim(), read_only: m.read_only, external: !!m.external }));
     }
+    // The user may pick another service while this one is saved: only reset
+    // the form of the service that was saved, and only when it was saved
+    // (a refused change stays in the form to be corrected).
+    const service = selected;
+    let stored = false;
     await run(
       'save',
       async () => {
-        const res = await put(`${base}/services/${encodeURIComponent(selected)}`, body);
+        const res = await put(`${base}/services/${encodeURIComponent(service)}`, body);
         compose = res.compose;
         stack = { ...stack, compose: res.compose };
+        stored = true;
       },
-      deploy ? `${selected} saved and recreated` : `${selected} saved — recreate it to apply`,
+      deploy ? `${service} saved and recreated` : `${service} saved — recreate it to apply`,
     );
-    resetForm();
+    if (stored && selected === service) resetForm();
   }
 
   async function runCheck() {
