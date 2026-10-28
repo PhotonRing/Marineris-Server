@@ -50,6 +50,11 @@ buttons that say what they do.
   exactly what it does (and what it keeps).
 - The routes page loads containers and stack icons in parallel.
 
+### Fixed
+
+- Stack page: saving a service no longer clears the form of another service
+  picked meanwhile, nor the user's input when the change is refused.
+
 ### Security
 
 - Caddy image: `go-jose` 4.1.6 (CVE-2026-116587, denial of service when
