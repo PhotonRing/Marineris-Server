@@ -282,12 +282,13 @@ func (m *Manager) AutheliaInput(ctx context.Context) (authelia.Input, error) {
 		return in, err
 	}
 	for _, r := range routes {
-		if r.Enabled && r.Auth == store.AuthAuthelia {
-			in.ProtectedHosts = append(in.ProtectedHosts, r.Host)
+		if r.Enabled && store.UsesAuthelia(r.Auth) {
+			in.Protected = append(in.Protected, authelia.Resource{Host: r.Host, PathPrefix: r.PathPrefix, AdminOnly: r.Auth == store.AuthAdmins})
 		}
 	}
+	// Only administrators have any business on the Marineris UI.
 	if st.UIHost != "" && st.UIProtectWithAuthelia {
-		in.ProtectedHosts = append(in.ProtectedHosts, st.UIHost)
+		in.Protected = append(in.Protected, authelia.Resource{Host: st.UIHost, AdminOnly: true})
 	}
 	users, err := m.store.ListUsers(ctx)
 	if err != nil {
@@ -295,7 +296,7 @@ func (m *Manager) AutheliaInput(ctx context.Context) (authelia.Input, error) {
 	}
 	for _, u := range users {
 		in.Users = append(in.Users, authelia.User{
-			Username: u.Username, Email: st.ACMEEmail, PasswordHash: u.PasswordHash, Groups: []string{"admins"},
+			Username: u.Username, Email: st.ACMEEmail, PasswordHash: u.PasswordHash, Groups: []string{authelia.AdminsGroup},
 		})
 	}
 	return in, nil

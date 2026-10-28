@@ -20,7 +20,11 @@ const (
 const (
 	AuthNone     = "none"     // public
 	AuthAuthelia = "authelia" // forward-auth through Authelia (2FA)
+	AuthAdmins   = "admins"   // like AuthAuthelia, restricted to the admins group
 )
+
+// UsesAuthelia reports whether a route access policy goes through Authelia.
+func UsesAuthelia(auth string) bool { return auth == AuthAuthelia || auth == AuthAdmins }
 
 // RouteTarget describes where a route sends traffic. Which fields apply
 // depends on the route kind.

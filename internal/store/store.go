@@ -190,6 +190,17 @@ CREATE TABLE route_icons (
 	updated_at   TIMESTAMP NOT NULL
 );
 `,
+	// 3: uploaded images: branding assets and stack service icons
+	`
+CREATE TABLE images (
+	kind         TEXT NOT NULL,
+	key          TEXT NOT NULL,
+	content_type TEXT NOT NULL,
+	data         BLOB NOT NULL,
+	updated_at   TIMESTAMP NOT NULL,
+	PRIMARY KEY (kind, key)
+);
+`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

@@ -207,7 +207,7 @@ func ValidateRoute(r *store.Route) error {
 		return fmt.Errorf("path prefix %w", err)
 	}
 	switch r.Auth {
-	case store.AuthNone, store.AuthAuthelia:
+	case store.AuthNone, store.AuthAuthelia, store.AuthAdmins:
 	default:
 		return fmt.Errorf("unknown access policy %q", r.Auth)
 	}
@@ -339,7 +339,7 @@ func servers(in Input) obj {
 	})
 	for _, r := range rs {
 		chain := shield(in, fmt.Sprintf("route_%d", r.ID), r.RateLimit)
-		if r.Auth == store.AuthAuthelia {
+		if store.UsesAuthelia(r.Auth) {
 			chain = append(chain, forwardAuth(in.Env.AutheliaUpstream))
 		}
 		chain = append(chain, target(in.Env, r)...)

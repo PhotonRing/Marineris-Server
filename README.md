@@ -16,11 +16,17 @@
 > terminal, marketplace and disk manager come in later phases (see
 > [Roadmap](#roadmap)).
 
+<p align="center">
+  <img src="docs/images/hub.webp" alt="The Marineris hub: server widgets and app tiles over the Mars background" width="900">
+</p>
+
 ## Features (Phase 1)
 
 - **Hub.** A home page listing your apps as tiles (icon, name, subtitle — all
   customisable) with live widgets: server time, CPU, memory, disk, network and
   uptime. The status dashboard can be the home page instead.
+- **Your branding.** Name, accent colour, favicon, header icon and background,
+  changed from Settings → Branding (the login page uses them too).
 - **One source of truth.** Marineris generates and applies the configuration of
   Caddy and Authelia from its own database. Every change is validated (by the
   real `caddy` and `authelia` binaries), snapshotted, applied, health-checked and
@@ -30,9 +36,19 @@
   docker-compose stacks (Docker Compose SDK) with a **security policy**: no
   `privileged`, host namespaces, dangerous capabilities, devices, Docker socket
   or host-system mounts unless you explicitly allow the overridable ones.
+  Each stack has its own page: the status and icon of every service; start,
+  stop, restart, recreate or update one service or the whole stack; tabs to
+  follow a service's logs and edit its image, environment, mounts, networks
+  and ports (written back to `compose.yaml`, checked against the policy), or
+  edit the whole file. Icons are picked automatically from the image name
+  ([dashboard-icons](https://github.com/homarr-labs/dashboard-icons)), or set
+  with an `io.marineris.icon` label or from the UI; the stack takes the icon
+  of its main service (`io.marineris.main: "true"`, else the one published by
+  a route, else the first one).
 - **Routes.** Pick a container (its port is selected automatically), an external
   host (LAN appliance, other server) or a static folder / single-page app.
-  Per-route Authelia 2FA protection and rate limits.
+  Per-route Authelia 2FA protection — for everyone with an account, or
+  **administrators only** — and rate limits.
 - **Multi-domain TLS.** Let's Encrypt with **wildcard certificates through
   DNS-01** by default, or HTTP-01. **DNS credential profiles** for OVHcloud,
   Cloudflare, Gandi, Infomaniak and Route 53 — e.g. *OVH personal*, *OVH
@@ -124,9 +140,9 @@ Full guide: [docs/install.md](docs/install.md).
 
 | Phase | Scope |
 |---|---|
-| 1 ✅ | Repository, CI, compose stack, first-run setup, containers/stacks, routes, multi-domain certificates with DNS profiles, passkeys |
-| 2 | Users, groups and OIDC clients UI, per-route policies, CrowdSec UI (decisions, allow-lists, alerts), dashboard, monitoring and alerts, advanced raw-config editor |
-| 3 | Backups (restic), web terminal, marketplace (Cosmos-compatible catalogs, compose templates) |
+| 1 ✅ | Repository, CI, compose stack, first-run setup, containers/stacks (stack page with per-service status, actions, editing and icons), routes (public, 2FA or admins only), multi-domain certificates with DNS profiles, passkeys, branding from the UI |
+| 2 | Users, groups and OIDC clients UI; per-route access by user and group (beyond "administrators only"); CrowdSec UI (decisions, allow-lists, alerts); dashboard; monitoring and alerts, with per-service CPU, memory and network graphs on the stack page; live log streaming; advanced raw-config editor |
+| 3 | Backups (restic); **web terminal** inside containers (the stack page's Terminal tab: needs Docker `exec` through the socket proxy, with audit and step-up); stacks built from a Git repository or Dockerfile ("rebuild"); marketplace (Cosmos-compatible catalogs, compose templates, app icons) |
 | 4 | Disk manager: SMART, mdadm RAID (incl. RAID10), privileged helper with a fixed command set |
 
 ## License

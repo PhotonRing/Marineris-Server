@@ -4,6 +4,7 @@
   import { onStepUp, onUnauthenticated } from './lib/api.js';
   import { path, link, navigate } from './lib/router.js';
   import StepUp from './components/StepUp.svelte';
+  import BrandLogo from './components/BrandLogo.svelte';
   import Setup from './pages/Setup.svelte';
   import Login from './pages/Login.svelte';
   import Dashboard from './pages/Dashboard.svelte';
@@ -11,6 +12,7 @@
   import { get } from './lib/api.js';
   import Containers from './pages/Containers.svelte';
   import Stacks from './pages/Stacks.svelte';
+  import StackDetail from './pages/StackDetail.svelte';
   import Storage from './pages/Storage.svelte';
   import Routes from './pages/Routes.svelte';
   import Domains from './pages/Domains.svelte';
@@ -38,9 +40,12 @@
     { path: '/account', label: 'Account', icon: '☺', component: Account },
   ];
 
-  // "/" shows the page chosen in Settings → Home page.
+  // "/" shows the page chosen in Settings → Home page. /stacks/<name> is the
+  // page of one stack (highlighted as Stacks in the menu).
   let current = $derived(
-    pages.find((p) => p.path === ($path === '/' ? (app.home === 'dashboard' ? '/dashboard' : '/hub') : $path)) || pages[0],
+    $path.startsWith('/stacks/')
+      ? { path: $path, nav: '/stacks', label: 'Stacks', component: StackDetail }
+      : pages.find((p) => p.path === ($path === '/' ? (app.home === 'dashboard' ? '/dashboard' : '/hub') : $path)) || pages[0],
   );
 
   $effect(() => {
@@ -83,7 +88,7 @@
   {:else}
     <div class="center auth-bg">
       <div class="card auth-card stack">
-        <div class="auth-logo"><img src="/branding/logo-full.svg" alt="Marineris" /></div>
+        <BrandLogo />
         <h2>Setup pending</h2>
         <p>
           This server has not been set up yet. For security, the first-run setup is only available on the local listener.
@@ -99,13 +104,16 @@
 {:else}
   <div class="shell">
     <aside class="sidebar">
-      <div class="brand"><img src="/branding/icon-192.png" alt="" /><span class="wordmark" role="img" aria-label="Marineris"></span></div>
+      <div class="brand">
+        <img src={app.meta.brand?.logo || '/branding/icon-192.png'} alt="" />
+        {#if app.meta.brand?.custom_name}<span class="brand-name">{app.meta.brand.name}</span>{:else}<span class="wordmark" role="img" aria-label="Marineris"></span>{/if}
+      </div>
       <nav class="nav">
         {#each pages as p (p.path || p.section)}
           {#if p.section}
             <div class="section">{p.section}</div>
           {:else}
-            <a href={p.path} use:link class:active={current === p}><span aria-hidden="true">{p.icon}</span>{p.label}</a>
+            <a href={p.path} use:link class:active={(current.nav || current.path) === p.path}><span aria-hidden="true">{p.icon}</span>{p.label}</a>
           {/if}
         {/each}
       </nav>

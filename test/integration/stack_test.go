@@ -294,9 +294,14 @@ networks:
 		"target": map[string]any{"container": "it-web", "port": 8000}, "auth": "none", "enabled": true})
 	a.must("POST", "/api/routes", map[string]any{"name": "secure", "host": "secure." + zone, "kind": "container",
 		"target": map[string]any{"container": "it-web", "port": 8000}, "auth": "authelia", "enabled": true})
+	a.must("POST", "/api/routes", map[string]any{"name": "ops", "host": "ops." + zone, "kind": "container",
+		"target": map[string]any{"container": "it-web", "port": 8000}, "auth": "admins", "enabled": true})
+	if cur := a.must("GET", "/api/config/components/authelia/current", nil); !strings.Contains(fmt.Sprint(cur["content"]), "group:admins") {
+		t.Fatal("the admin-only route has no group rule in the Authelia configuration")
+	}
 
 	// --- Certificates are issued by the test CA -------------------------
-	for _, host := range []string{"web." + zone, "secure." + zone, "auth." + zone} {
+	for _, host := range []string{"web." + zone, "secure." + zone, "ops." + zone, "auth." + zone} {
 		waitFor(t, "certificate for "+host, 3*time.Minute, func() error {
 			iss, err := servedIssuer(host)
 			if err != nil {
@@ -318,18 +323,20 @@ networks:
 	// and a forged identity header changes nothing.
 	// Authelia answers browsers with 302 and API clients with 401; both
 	// point to the portal and never reach the application.
-	for _, h := range []map[string]string{
-		nil,
-		{"Accept": "text/html"},
-		{"Remote-User": "admin"},
-		{"Remote-User": "admin", "Remote-Groups": "admins", "X-Forwarded-User": "admin"},
-	} {
-		status, out, hdr := edgeGet(t, "https://secure."+zone+"/", h)
-		if (status != 302 && status != 401) || !strings.HasPrefix(hdr.Get("Location"), "https://auth."+zone) || strings.Contains(out, "hello user") {
-			t.Fatalf("protected route with %v: %d %q", h, status, out)
-		}
-		if h["Accept"] == "text/html" && status != 302 {
-			t.Fatalf("browsers must be redirected, got %d", status)
+	for _, host := range []string{"secure." + zone, "ops." + zone} {
+		for _, h := range []map[string]string{
+			nil,
+			{"Accept": "text/html"},
+			{"Remote-User": "admin"},
+			{"Remote-User": "admin", "Remote-Groups": "admins", "X-Forwarded-User": "admin"},
+		} {
+			status, out, hdr := edgeGet(t, "https://"+host+"/", h)
+			if (status != 302 && status != 401) || !strings.HasPrefix(hdr.Get("Location"), "https://auth."+zone) || strings.Contains(out, "hello user") {
+				t.Fatalf("protected route %s with %v: %d %q", host, h, status, out)
+			}
+			if h["Accept"] == "text/html" && status != 302 {
+				t.Fatalf("browsers must be redirected, got %d", status)
+			}
 		}
 	}
 	waitFor(t, "authelia portal", time.Minute, func() error {
@@ -343,6 +350,28 @@ networks:
 	if status, _, _ := edgeGet(t, "https://unknown."+zone+"/", nil); status == 200 {
 		t.Fatal("unknown host served content")
 	}
+
+	// --- Stack services: status, edit and recreate, restart, update -------
+	sv := a.must("GET", "/api/stacks/demo/services", nil)
+	if sv["main"] != "web" || sv["state"] != "running" {
+		t.Fatalf("stack services: %v", sv)
+	}
+	before := a.must("GET", "/api/containers/it-web", nil)
+	a.must("PUT", "/api/stacks/demo/services/web", map[string]any{
+		"environment": []map[string]string{{"key": "GREETING", "value": "hello"}}, "deploy": true,
+	})
+	after := a.must("GET", "/api/containers/it-web", nil)
+	if after["id"] == before["id"] || !strings.Contains(fmt.Sprint(after["env"]), "GREETING=") {
+		t.Fatalf("the edited service was not recreated with its new environment: %v", after["env"])
+	}
+	a.must("POST", "/api/stacks/demo/services/web/restart", nil)
+	a.must("POST", "/api/stacks/demo/services/web/update", nil)
+	waitFor(t, "the recreated service behind its route", time.Minute, func() error {
+		if status, _, _ := edgeGet(t, "https://web."+zone+"/", nil); status != 200 {
+			return fmt.Errorf("status %d", status)
+		}
+		return nil
+	})
 
 	// --- CrowdSec: a ban decision blocks the client at the edge ----------
 	if crowdsec {

@@ -18,6 +18,12 @@
   color-scheme: dark;
 }
 
+:root {
+  /* Height of anything fixed above the app (the demo banner). */
+  --chrome-top: 0px;
+  --hub-bg-image: url('/branding/background.webp');
+}
+
 [data-theme='light'] {
   --bg: #f6f7f9;
   --surface: #ffffff;
@@ -98,15 +104,15 @@ pre {
 .shell {
   display: grid;
   grid-template-columns: 240px 1fr;
-  min-height: 100vh;
+  min-height: calc(100vh - var(--chrome-top));
 }
 .sidebar {
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   border-right: 1px solid var(--border);
   padding: 1rem 0.75rem;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: var(--chrome-top);
+  height: calc(100vh - var(--chrome-top));
   overflow-y: auto;
 }
 .brand {
@@ -121,6 +127,28 @@ pre {
 .brand img {
   width: 34px;
   height: 34px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.brand-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.auth-brand img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+}
+.auth-brand .brand-name {
+  font-size: 1.5rem;
+  font-weight: 700;
 }
 .nav a {
   display: flex;
@@ -239,7 +267,8 @@ label {
 .field {
   margin-bottom: 0.9rem;
 }
-.field .help {
+.field .help,
+.brand-image .help {
   color: var(--muted);
   font-size: 0.8rem;
   margin-top: 0.25rem;
@@ -297,8 +326,12 @@ button,
   cursor: pointer;
   white-space: nowrap;
 }
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+.btn:hover {
   border-color: var(--accent);
+}
+.btn:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
 }
 button:disabled {
   opacity: 0.55;
@@ -317,7 +350,8 @@ button.danger {
 button.ghost {
   background: transparent;
 }
-button.small {
+button.small,
+.btn.small {
   padding: 0.25rem 0.6rem;
   font-size: 0.82rem;
 }
@@ -393,7 +427,7 @@ tr:hover td {
 
 /* Auth screens --------------------------------------------------------------- */
 .center {
-  min-height: 100vh;
+  min-height: calc(100vh - var(--chrome-top));
   display: grid;
   place-items: center;
   padding: 2rem 1rem;
@@ -528,7 +562,7 @@ dialog::backdrop {
 .auth-bg {
   background:
     linear-gradient(180deg, rgb(10 6 4 / 55%), rgb(10 6 4 / 80%)),
-    url('/branding/background.webp') center / cover no-repeat fixed;
+    var(--hub-bg-image) center / cover no-repeat fixed;
 }
 .auth-bg .card {
   background: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -676,13 +710,27 @@ dialog::backdrop {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Optional background (Settings → Hub): the main area only, with a strong
-   overlay so tiles and widgets stay readable. */
-.main:has(.hub-bg) {
+/* Optional background (Settings → Hub): covers the whole window, behind the
+   sidebar too, with a strong overlay so tiles and widgets stay readable. A
+   fixed layer rather than background-attachment: fixed, which some mobile
+   browsers ignore. */
+.shell:has(.hub-bg) {
+  position: relative;
+  isolation: isolate; /* keeps the layer below above the page background */
+}
+.shell:has(.hub-bg)::before {
+  content: '';
+  position: fixed;
+  inset: var(--chrome-top) 0 0 0;
+  z-index: -1;
+  pointer-events: none;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--bg) 78%, transparent), color-mix(in srgb, var(--bg) 92%, transparent)),
-    url('/branding/background.webp') center / cover no-repeat fixed;
-  min-height: 100vh;
+    var(--hub-bg-image) center / cover no-repeat;
+}
+.shell:has(.hub-bg) .sidebar {
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(10px);
 }
 .hub-bg .tile,
 .hub-bg .widget {
@@ -698,4 +746,166 @@ dialog::backdrop {
 .row > select {
   width: auto;
   flex: 1;
+}
+.row.nowrap {
+  flex-wrap: nowrap;
+}
+.row.nowrap > input {
+  flex: 1;
+  min-width: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.color-swatch {
+  width: 2.6rem;
+  height: 2.3rem;
+  padding: 0.15rem;
+  flex: none;
+  cursor: pointer;
+}
+.brand-images {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  margin: 1rem 0;
+}
+.brand-image {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+.brand-image img {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 4px;
+}
+.brand-image img.wide {
+  width: 96px;
+  object-fit: cover;
+  padding: 0;
+}
+
+/* Stacks --------------------------------------------------------------------- */
+.app-icon {
+  flex: none;
+  border-radius: 22%;
+  object-fit: contain;
+}
+.app-icon.tile-initials {
+  display: inline-grid;
+  place-items: center;
+  font-weight: 700;
+}
+.file-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 0.75rem;
+}
+.stack-link {
+  color: var(--text);
+}
+.stack-link:hover {
+  text-decoration: none;
+}
+.stack-link:hover strong {
+  color: var(--accent-2);
+}
+.no-margin {
+  margin: 0;
+}
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.35rem;
+  background: var(--muted);
+  flex: none;
+}
+.dot.ok {
+  background: var(--ok);
+}
+.dot.warn {
+  background: var(--warn);
+}
+.dot.error {
+  background: var(--error);
+}
+.stack-layout {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.service-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+}
+.service-item {
+  justify-content: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: transparent;
+  border-color: transparent;
+  text-align: left;
+  font-weight: 500;
+}
+.service-item.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.service-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.service-name {
+  font-weight: 600;
+}
+.service-image {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.service-panel h4 {
+  margin: 1.2rem 0 0.5rem;
+}
+textarea.code.tall {
+  min-height: 26rem;
+}
+pre.logs {
+  max-height: 32rem;
+  white-space: pre-wrap;
+}
+.list-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+.list-editor > .row {
+  width: 100%;
+}
+.row.nowrap > input.env-key {
+  flex: 0 1 14rem;
+}
+@media (max-width: 860px) {
+  .stack-layout {
+    grid-template-columns: 1fr;
+  }
 }

@@ -3,6 +3,9 @@
   import { get, post, put, del, describe } from '../lib/api.js';
   import { toast } from '../lib/state.svelte.js';
   import Modal from '../components/Modal.svelte';
+  import AppIcon from '../components/AppIcon.svelte';
+  import StateBadge from '../components/StateBadge.svelte';
+  import { link, navigate } from '../lib/router.js';
 
   const template = `services:
   app:
@@ -47,20 +50,7 @@
     editorOpen = true;
   }
 
-  async function edit(s) {
-    try {
-      const full = await get(`/api/stacks/${encodeURIComponent(s.name)}`);
-      editing = full.name;
-      name = full.name;
-      compose = full.compose;
-      envText = full.env;
-      unsafeAck = full.unsafe_ack;
-      check = null;
-      editorOpen = true;
-    } catch (err) {
-      toast(describe(err), 'error');
-    }
-  }
+  const open = (s) => navigate(`/stacks/${encodeURIComponent(s.name)}`);
 
   async function runCheck() {
     try {
@@ -81,9 +71,9 @@
       if (deploy) {
         await post(`/api/stacks/${encodeURIComponent(name)}/deploy`);
         toast(`Stack ${name} deployed`);
-        editorOpen = false;
       }
-      await load();
+      editorOpen = false;
+      open({ name });
     } catch (err) {
       toast(describe(err), 'error');
       await runCheck();
@@ -129,16 +119,23 @@
   {#if error}<div class="alert error">{error}</div>{/if}
   <div class="card table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>Containers</th><th>Deployed</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Status</th><th>Containers</th><th>Deployed</th><th></th></tr></thead>
       <tbody>
         {#each list as s (s.name)}
           <tr>
-            <td><strong>{s.name}</strong> {#if s.unsafe_ack}<span class="badge warn">unsafe allowed</span>{/if}</td>
+            <td>
+              <a class="row stack-link" href={`/stacks/${encodeURIComponent(s.name)}`} use:link>
+                <AppIcon src={s.icon} name={s.name} size={36} />
+                <span><strong>{s.name}</strong>{#if s.services !== undefined}<span class="muted small">&nbsp;· {s.services} service{s.services === 1 ? '' : 's'}</span>{/if}</span>
+              </a>
+              {#if s.unsafe_ack}<span class="badge warn">unsafe allowed</span>{/if}
+            </td>
+            <td><StateBadge state={s.state} /></td>
             <td>{s.running} / {s.containers} running</td>
             <td class="small muted">{s.deployed_at ? new Date(s.deployed_at).toLocaleString() : 'never'}</td>
             <td>
               <div class="row end">
-                <button class="small" onclick={() => edit(s)}>Edit</button>
+                <button class="small" onclick={() => open(s)}>Open</button>
                 <button class="small" onclick={() => action(s, 'deploy')}>Deploy</button>
                 <button class="small" onclick={() => action(s, 'down')}>Stop</button>
                 <button class="small danger" onclick={() => askDelete(s)}>Delete</button>
@@ -146,14 +143,14 @@
             </td>
           </tr>
         {:else}
-          <tr><td colspan="4" class="muted">No stacks yet. Import a docker-compose file with “New stack”.</td></tr>
+          <tr><td colspan="5" class="muted">No stacks yet. Import a docker-compose file with “New stack”.</td></tr>
         {/each}
       </tbody>
     </table>
   </div>
 </div>
 
-<Modal bind:open={editorOpen} title={editing ? `Edit stack ${editing}` : 'New stack'} wide>
+<Modal bind:open={editorOpen} title="New stack" wide>
   <div class="field">
     <label for="sn">Name</label>
     <input id="sn" bind:value={name} disabled={!!editing} placeholder="media" />

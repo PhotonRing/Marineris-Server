@@ -41,7 +41,7 @@ func baseInput() Input {
 		Routes: []*store.Route{
 			{ID: 1, Name: "jellyfin", Host: "media.example.com", Kind: store.RouteContainer, Target: store.RouteTarget{Container: "jellyfin", Port: 8096}, Auth: store.AuthAuthelia, Enabled: true},
 			{ID: 2, Name: "api", Host: "media.example.com", PathPrefix: "/api", Kind: store.RouteContainer, Target: store.RouteTarget{Container: "api", Port: 3000}, Auth: store.AuthNone, Enabled: true, RateLimit: &store.RateLimit{Events: 100, Window: "1m"}},
-			{ID: 3, Name: "nas", Host: "nas.friend.org", Kind: store.RouteExternal, Target: store.RouteTarget{URL: "https://192.168.1.20:5001", TLSInsecureSkipVerify: true}, Auth: store.AuthAuthelia, Enabled: true},
+			{ID: 3, Name: "nas", Host: "nas.friend.org", Kind: store.RouteExternal, Target: store.RouteTarget{URL: "https://192.168.1.20:5001", TLSInsecureSkipVerify: true}, Auth: store.AuthAdmins, Enabled: true},
 			{ID: 4, Name: "site", Host: "www.plain.net", Kind: store.RouteSPA, Target: store.RouteTarget{Folder: "site"}, Auth: store.AuthNone, Enabled: true},
 			{ID: 5, Name: "disabled", Host: "off.example.com", Kind: store.RouteStatic, Target: store.RouteTarget{Folder: "x"}, Auth: store.AuthNone, Enabled: false},
 		},

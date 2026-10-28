@@ -40,8 +40,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request, _ *reqCtx)
 }
 
 func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
+	b, err := s.brand(r.Context(), rc.settings)
+	if err != nil {
+		return err
+	}
 	return ok(w, map[string]any{
 		"name":           "Marineris",
+		"brand":          b,
 		"version":        s.Version,
 		"listener":       rc.listener,
 		"setup_complete": rc.settings.SetupComplete,

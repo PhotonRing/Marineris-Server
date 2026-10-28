@@ -30,6 +30,7 @@ const (
 	// admin cannot lock themselves out.
 	SystemLabel  = "io.marineris.system"
 	ProjectLabel = "com.docker.compose.project"
+	ServiceLabel = "com.docker.compose.service"
 )
 
 // ErrProtected is returned for forbidden actions on system containers.
@@ -70,6 +71,7 @@ type Container struct {
 	Created  int64    `json:"created"`
 	Ports    []int    `json:"ports"`
 	Stack    string   `json:"stack,omitempty"`
+	Service  string   `json:"service,omitempty"` // compose service
 	Networks []string `json:"networks"`
 	System   bool     `json:"system"`
 	// Routable is true when Caddy can reach the container (it is attached
@@ -92,6 +94,7 @@ func (c *Client) List(ctx context.Context) ([]Container, error) {
 			Status:  s.Status,
 			Created: s.Created,
 			Stack:   s.Labels[ProjectLabel],
+			Service: s.Labels[ServiceLabel],
 			System:  s.Labels[SystemLabel] == "true",
 		}
 		if len(s.Names) > 0 {
@@ -178,6 +181,7 @@ func (c *Client) Inspect(ctx context.Context, ref string) (*Detail, error) {
 		d.Image = in.Config.Image
 		d.Labels = in.Config.Labels
 		d.Stack = in.Config.Labels[ProjectLabel]
+		d.Service = in.Config.Labels[ServiceLabel]
 		d.System = in.Config.Labels[SystemLabel] == "true"
 		d.Command = append(append(d.Command, in.Config.Entrypoint...), in.Config.Cmd...)
 		for _, e := range in.Config.Env {

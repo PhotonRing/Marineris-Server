@@ -36,6 +36,12 @@ type Settings struct {
 	UIProtectWithAuthelia bool   `json:"ui_protect_with_authelia"`
 	AuthSubdomain         string `json:"auth_subdomain"`
 
+	// Branding: the name shown in the header and the page title, and an
+	// accent colour (#rrggbb) replacing the theme's. Empty means default.
+	// Images (favicon, logo, background) are stored with SetImage.
+	BrandName   string `json:"brand_name"`
+	AccentColor string `json:"accent_color"`
+
 	// Home page and hub
 	HomePage      string   `json:"home_page"` // "hub" or "dashboard"
 	HubTitle      string   `json:"hub_title"`

@@ -75,6 +75,8 @@ func TestDangerousStacksAreFlagged(t *testing.T) {
 		"build":         {"services: {a: {build: .}}", "build", false},
 		"reserved name": {"services: {a: {image: x, container_name: marineris}}", "container_name", false},
 		"volumes_from":  {"services: {a: {image: x}, b: {image: x, volumes_from: [a]}}", "volumes_from", true},
+		"system label":  {"services: {a: {image: x, labels: {io.marineris.system: 'true'}}}", "label", false},
+		"system volume": {"services: {a: {image: x}}\nvolumes: {v: {labels: [io.marineris.system=true]}}", "label", false},
 	}
 	m := manager(t)
 	for name, c := range cases {

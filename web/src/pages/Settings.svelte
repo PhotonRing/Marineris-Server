@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { get, put, describe } from '../lib/api.js';
   import { app, toast, loadMeta } from '../lib/state.svelte.js';
+  import BrandingCard from '../components/BrandingCard.svelte';
 
   const widgetList = [
     { id: 'clock', label: 'Server time' },
@@ -125,7 +126,7 @@
           {/each}
         </div>
       </div>
-      <label class="check"><input type="checkbox" bind:checked={s.hub_background} /> Show the branding background behind the hub (dimmed for readability)</label>
+      <label class="check"><input type="checkbox" bind:checked={s.hub_background} /> Show the background image behind the hub (dimmed for readability; see Branding below)</label>
     </div>
 
     <div class="card">
@@ -169,4 +170,7 @@
       <button class="primary" type="submit" disabled={busy}>{busy ? 'Applying…' : 'Save & apply'}</button>
     </div>
   </form>
+  <div class="mt">
+    <BrandingCard />
+  </div>
 {/if}

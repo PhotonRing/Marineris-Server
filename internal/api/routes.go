@@ -40,6 +40,7 @@ func (s *Server) table() []Route {
 		// Public
 		{G, "/api/health", Public, false, s.handleHealth},
 		{G, "/api/meta", Public, false, s.handleMeta},
+		{G, "/api/branding/{asset}", Public, false, s.handleBrandingAsset},
 
 		// First-run setup (local listener only, before setup)
 		{P, "/api/setup/begin", SetupOnly, true, s.handleSetupBegin},
@@ -77,6 +78,9 @@ func (s *Server) table() []Route {
 		{G, "/api/settings", Authed, false, s.handleSettingsGet},
 		{U, "/api/settings", StepUp, false, s.handleSettingsPut},
 		{G, "/api/audit", Authed, false, s.handleAudit},
+		{U, "/api/branding", StepUp, false, s.handleBrandingPut},
+		{U, "/api/branding/{asset}", StepUp, false, s.handleBrandingAssetPut},
+		{D, "/api/branding/{asset}", StepUp, false, s.handleBrandingAssetDelete},
 		{G, "/api/authelia/notification", Authed, false, s.handleAutheliaNotification},
 
 		// DNS profiles
@@ -117,6 +121,18 @@ func (s *Server) table() []Route {
 		{U, "/api/stacks/{name}", Authed, false, s.handleStackUpdate},
 		{P, "/api/stacks/{name}/deploy", Authed, false, s.handleStackDeploy},
 		{P, "/api/stacks/{name}/down", Authed, false, s.handleStackDown},
+		{P, "/api/stacks/{name}/restart", Authed, false, s.handleStackRestart},
+		{P, "/api/stacks/{name}/pull", Authed, false, s.handleStackPull},
+		{G, "/api/stacks/{name}/services", Authed, false, s.handleStackServices},
+		{U, "/api/stacks/{name}/services/{service}", Authed, false, s.handleServiceUpdate},
+		{P, "/api/stacks/{name}/services/{service}/start", Authed, false, s.handleServiceAction("start")},
+		{P, "/api/stacks/{name}/services/{service}/stop", Authed, false, s.handleServiceAction("stop")},
+		{P, "/api/stacks/{name}/services/{service}/restart", Authed, false, s.handleServiceAction("restart")},
+		{P, "/api/stacks/{name}/services/{service}/recreate", Authed, false, s.handleServiceAction("recreate")},
+		{P, "/api/stacks/{name}/services/{service}/update", Authed, false, s.handleServiceAction("update")},
+		{G, "/api/stacks/{name}/icons/{service}", Authed, false, s.handleServiceIcon},
+		{U, "/api/stacks/{name}/icons/{service}", Authed, false, s.handleServiceIconSet},
+		{D, "/api/stacks/{name}/icons/{service}", Authed, false, s.handleServiceIconDelete},
 		{D, "/api/stacks/{name}", StepUp, false, s.handleStackDelete},
 
 		// Volumes and networks

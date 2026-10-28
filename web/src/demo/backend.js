@@ -3,6 +3,7 @@
 // same response shapes, validation of the main inputs, configuration
 // history and audit log. Nothing leaves the browser.
 import { seed } from './data.js';
+import { parseServices, editService } from './compose.js';
 
 const db = seed();
 let nextId = 100;
@@ -121,9 +122,62 @@ function stackCheck(compose, ack) {
   return { violations: v, blocking: v.filter((x) => !(ack && x.overridable)) };
 }
 
+// Same rules as internal/api/stack_services.go.
+function containersState(cs) {
+  if (!cs.length) return 'not_deployed';
+  const running = cs.filter((c) => c.state === 'running').length;
+  if (!running) return 'stopped';
+  if (cs.some((c) => c.health === 'unhealthy')) return 'unhealthy';
+  if (cs.some((c) => c.health === 'starting')) return 'starting';
+  return running < cs.length ? 'partial' : 'running';
+}
+
+function stackServices(s) {
+  const defs = parseServices(s.compose);
+  let routed = '';
+  const services = defs.map((d) => {
+    const containers = db.containers.filter((c) => c.stack === s.name && c.service === d.name);
+    let icon = db.serviceIcons.get(`${s.name}/${d.name}`) || '';
+    const source = icon ? 'custom' : '';
+    const route = db.routes.find((r) => r.kind === 'container' && containers.some((c) => c.name === r.target.container));
+    if (route && !routed) routed = d.name;
+    if (!icon && route && db.icons.has(route.id)) icon = db.icons.get(route.id);
+    return { ...d, icon, icon_source: source || (icon ? 'route' : ''), state: containersState(containers), containers };
+  });
+  const main = defs.find((d) => d.labels.some((l) => l.key === 'io.marineris.main' && l.value === 'true'))?.name || routed || defs[0]?.name || '';
+  for (const v of services) v.main = v.name === main;
+  let state = containersState(services.flatMap((v) => v.containers));
+  if ((state === 'running' || state === 'starting') && services.some((v) => !v.containers.length)) state = 'partial';
+  return { main, icon: services.find((v) => v.main)?.icon || '', state, services };
+}
+
 function stackView(s) {
   const own = db.containers.filter((c) => c.stack === s.name);
-  return { name: s.name, containers: own.length, running: own.filter((c) => c.state === 'running').length, unsafe_ack: s.unsafe_ack, created_at: s.created_at, updated_at: s.updated_at, deployed_at: s.deployed_at };
+  const sum = stackServices(s);
+  return {
+    name: s.name, containers: own.length, running: own.filter((c) => c.state === 'running').length, unsafe_ack: s.unsafe_ack, created_at: s.created_at, updated_at: s.updated_at, deployed_at: s.deployed_at,
+    state: sum.state, main: sum.main, icon: sum.icon, services: sum.services.length,
+  };
+}
+
+// Creates or refreshes the containers of a stack's services (deploy).
+function converge(s, only) {
+  const defs = parseServices(s.compose);
+  db.containers = db.containers.filter((c) => c.stack !== s.name || defs.some((d) => d.name === c.service));
+  for (const d of defs) {
+    if (only && !only.includes(d.name)) continue;
+    let c = db.containers.find((x) => x.stack === s.name && x.service === d.name);
+    if (!c) {
+      c = { id: (nextId++).toString(16).padStart(64, '0'), name: `${s.name}-${d.name}-1`, created: 0, ports: [], stack: s.name, service: d.name, networks: [], system: false, routable: false, health: 'none' };
+      db.containers.push(c);
+    }
+    Object.assign(c, {
+      image: d.image, state: 'running', status: 'Up less than a second', created: Math.floor(Date.now() / 1000),
+      networks: d.networks.length ? d.networks.map((n) => (n === 'default' ? `${s.name}_default` : n === 'apps' ? 'marineris-apps' : n)) : [`${s.name}_default`],
+    });
+    c.routable = c.networks.includes('marineris-apps');
+  }
+  s.deployed_at = iso();
 }
 
 function containerDetail(c) {
@@ -151,13 +205,58 @@ function logs(c) {
   return [`${t(3600)} ${c.name}: started`, `${t(1800)} ${c.name}: ready`, `${t(60)} ${c.name}: healthy`].join('\n');
 }
 
+function brand() {
+  const { name, accent, images } = db.brand;
+  return { name: name || 'Marineris', custom_name: !!name, accent, ...images };
+}
+
+// Sniffs an uploaded image (base64) like the server does.
+function imageType(b64) {
+  let head = '';
+  try {
+    head = atob(b64.slice(0, 64));
+  } catch {
+    return '';
+  }
+  if (head.startsWith('\x89PNG')) return 'image/png';
+  if (head.startsWith('\xff\xd8\xff')) return 'image/jpeg';
+  if (head.startsWith('GIF8')) return 'image/gif';
+  if (head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP') return 'image/webp';
+  if (head.startsWith('\0\0\x01\0')) return 'image/x-icon';
+  if (/^\s*(<\?xml|<svg|<!--)/i.test(head)) return 'image/svg+xml';
+  return '';
+}
+
 const QR = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="#fff"/><text x="80" y="84" font-family="sans-serif" font-size="13" text-anchor="middle">QR code (demo)</text></svg>');
 const code = () => Array.from({ length: 2 }, () => Math.random().toString(36).slice(2, 6)).join('-');
 
 // [method, pattern, handler(params, body, query)]
 const routes = [
   ['GET', '/api/health', () => ok({ status: 'ok' })],
-  ['GET', '/api/meta', () => ok({ ...db.meta, setup_complete: true })],
+  ['GET', '/api/meta', () => ok({ ...db.meta, setup_complete: true, brand: brand() })],
+  ['PUT', '/api/branding', (p, b) => {
+    const name = (b.name || '').trim();
+    if (name.length > 40 || /[<>\r\n\t]/.test(name)) return fail(400, 'invalid', 'name: is limited to 40 characters, without < > or line breaks', { field: 'name' });
+    const accent = (b.accent || '').trim().toLowerCase();
+    if (accent && !/^#[0-9a-f]{6}$/.test(accent)) return fail(400, 'invalid', 'accent: must be a colour like #e8743b', { field: 'accent' });
+    Object.assign(db.brand, { name: name === 'Marineris' ? '' : name, accent });
+    audit('branding.update', '', `name=${db.brand.name} accent=${accent}`);
+    return ok(brand());
+  }],
+  ['PUT', '/api/branding/{asset}', (p, b) => {
+    if (!(p.asset in db.brand.images)) return notFound();
+    const type = imageType(b.data || '');
+    if (!type) return fail(400, 'invalid', 'data: icons: not a PNG, JPEG, WebP, GIF, ICO or SVG image (max 512 KB)', { field: 'data' });
+    db.brand.images[p.asset] = `data:${type};base64,${b.data}`;
+    audit(`branding.${p.asset}`, '', type);
+    return ok(brand());
+  }],
+  ['DELETE', '/api/branding/{asset}', (p) => {
+    if (!(p.asset in db.brand.images)) return notFound();
+    db.brand.images[p.asset] = '';
+    audit(`branding.${p.asset}`, '', 'reset to default');
+    return ok(brand());
+  }],
   ['POST', '/api/auth/login', (p, b) => (b.username && b.password ? ok({ mfa_required: true, mfa_token: 'demo' }) : fail(401, 'invalid_credentials', 'wrong username or password'))],
   ['POST', '/api/auth/login/mfa', (p, b) => {
     if (!(b.code || b.recovery_code)) return fail(401, 'invalid_code', 'wrong code');
@@ -290,7 +389,7 @@ const routes = [
     if (err) return err;
     const r = { id: nextId++, name: b.name, host: b.host, path_prefix: b.path_prefix || '', kind: b.kind, target: b.target, auth: b.auth, rate_limit: b.rate_limit ?? null, enabled: b.enabled !== false, created_at: iso(), updated_at: iso(), hub: { visible: true, title: '', subtitle: '', ...(b.hub || {}), has_icon: false } };
     db.routes.push(r);
-    applied(`route ${r.name} added`, r.auth === 'authelia' ? ['caddy', 'authelia'] : ['caddy']);
+    applied(`route ${r.name} added`, r.auth !== 'none' ? ['caddy', 'authelia'] : ['caddy']);
     audit('route.create', r.name, r.host);
     return ok(r);
   }],
@@ -362,17 +461,58 @@ const routes = [
   }],
   ['POST', '/api/stacks/{name}/{action}', (p) => {
     const s = db.stacks.find((x) => x.name === p.name);
-    if (!s || !['deploy', 'down'].includes(p.action)) return notFound();
-    const services = [...s.compose.matchAll(/^ {2}([a-z0-9_-]+):\s*$/gm)].map((m) => m[1]);
-    const images = [...s.compose.matchAll(/image:\s*(\S+)/g)].map((m) => m[1]);
-    db.containers = db.containers.filter((c) => c.stack !== s.name);
-    if (p.action === 'deploy') {
-      services.forEach((name, i) => db.containers.push({ id: (nextId++).toString(16).padStart(64, '0'), name, image: images[i] || 'image', state: 'running', status: 'Up less than a second', health: 'none', created: Math.floor(Date.now() / 1000), ports: [], stack: s.name, networks: [`${s.name}_default`], system: false, routable: /marineris-apps/.test(s.compose) }));
-      s.deployed_at = iso();
-    }
-    audit(`stack.${p.action}`, s.name);
+    if (!s || !['deploy', 'down', 'restart', 'pull'].includes(p.action)) return notFound();
+    if (p.action === 'down') db.containers = db.containers.filter((c) => c.stack !== s.name);
+    else if (p.action === 'restart') for (const c of db.containers.filter((x) => x.stack === s.name)) Object.assign(c, { state: 'running', status: 'Up less than a second' });
+    else converge(s);
+    audit(`stack.${p.action === 'pull' ? 'update' : p.action}`, s.name);
     return ok({ ok: true });
   }],
+  ['GET', '/api/stacks/{name}/services', (p) => { const s = db.stacks.find((x) => x.name === p.name); return s ? ok(stackServices(s)) : notFound(); }],
+  ['PUT', '/api/stacks/{name}/services/{service}', (p, b) => {
+    const s = db.stacks.find((x) => x.name === p.name);
+    if (!s || !parseServices(s.compose).some((d) => d.name === p.service)) return notFound();
+    const { deploy, ...edit } = b;
+    for (const v of edit.environment || []) if (/[= \t]/.test(v.key)) return fail(400, 'bad_request', `environment: invalid variable name "${v.key}"`);
+    const compose = editService(s.compose, p.service, edit);
+    const { blocking } = stackCheck(compose, s.unsafe_ack);
+    if (blocking.length) return fail(422, 'policy', 'the stack violates the security policy', blocking);
+    Object.assign(s, { compose, updated_at: iso() });
+    audit('stack.service.update', `${s.name}/${p.service}`);
+    if (deploy) converge(s, [p.service]);
+    return ok({ ok: true, compose });
+  }],
+  ['POST', '/api/stacks/{name}/services/{service}/{action}', (p) => {
+    const s = db.stacks.find((x) => x.name === p.name);
+    if (!s || !parseServices(s.compose).some((d) => d.name === p.service)) return notFound();
+    const own = db.containers.filter((c) => c.stack === s.name && c.service === p.service);
+    if (p.action === 'recreate' || p.action === 'update') converge(s, [p.service]);
+    else if (!['start', 'stop', 'restart'].includes(p.action)) return notFound();
+    else if (!own.length) return fail(409, 'not_deployed', 'the service has no container: deploy the stack first');
+    for (const c of own) {
+      if (p.action === 'stop') Object.assign(c, { state: 'exited', status: 'Exited (0) less than a second ago' });
+      if (p.action === 'start' || p.action === 'restart') Object.assign(c, { state: 'running', status: 'Up less than a second' });
+    }
+    audit(p.action === 'recreate' || p.action === 'update' ? `stack.${p.action}` : `container.${p.action}`, `${s.name}/${p.service}`);
+    return ok({ ok: true });
+  }],
+  ['PUT', '/api/stacks/{name}/icons/{service}', (p, b) => {
+    let url = '';
+    if (b.name) {
+      if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(b.name)) return fail(400, 'invalid', "name: icons: an icon name uses lowercase letters, digits and '-'", { field: 'name' });
+      url = `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${b.name}.png`;
+    } else if (b.url) {
+      if (!/^https:\/\//.test(b.url)) return fail(502, 'icon_fetch', 'icons: the icon URL must be an https:// URL');
+      url = b.url;
+    } else if (b.data) {
+      const type = imageType(b.data);
+      if (!type) return fail(400, 'invalid', 'data: icons: not a PNG, JPEG, WebP, GIF, ICO or SVG image (max 512 KB)', { field: 'data' });
+      url = `data:${type};base64,${b.data}`;
+    } else return fail(400, 'bad_request', 'give data, url or name');
+    db.serviceIcons.set(`${p.name}/${p.service}`, url);
+    return ok({ ok: true, content_type: 'image/png' });
+  }],
+  ['DELETE', '/api/stacks/{name}/icons/{service}', (p) => { db.serviceIcons.delete(`${p.name}/${p.service}`); return ok({ ok: true }); }],
   ['DELETE', '/api/stacks/{name}', (p) => {
     db.stacks = db.stacks.filter((x) => x.name !== p.name);
     db.containers = db.containers.filter((c) => c.stack !== p.name);
@@ -422,7 +562,7 @@ export async function handle(method, url, body) {
     const m = path.match(r.re);
     if (!m) continue;
     const params = Object.fromEntries(r.names.map((n, i) => [n, decodeURIComponent(m[i + 1])]));
-    const open = path === '/api/meta' || path === '/api/health' || path.startsWith('/api/auth/login') || path === '/api/auth/passkey/begin';
+    const open = path === '/api/meta' || path.startsWith('/api/branding/') && method === 'GET' || path === '/api/health' || path.startsWith('/api/auth/login') || path === '/api/auth/passkey/begin';
     if (!open && !db.session) return unauthenticated();
     return r.fn(params, body || {}, new URLSearchParams(qs));
   }
