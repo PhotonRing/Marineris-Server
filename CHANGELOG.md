@@ -18,6 +18,14 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-10-28
+
+Passkeys are added from the UI.
+
+**Upgrading from 0.1.8:** in `.env`, set `MARINERIS_IMAGE` and
+`MARINERIS_CADDY_IMAGE` to the `0.1.9` tags, then
+`docker compose pull && docker compose up -d`.
+
 ### Added
 
 - **Passkeys are added from the UI again.** Behind Authelia, **Account →
@@ -368,7 +376,8 @@ First public version: Phase 1.
   the real stack with a test ACME CA, gitleaks, govulncheck, Trivy, CodeQL,
   OWASP ZAP; multi-arch signed images with SBOM and provenance.
 
-[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.5...v0.1.6
