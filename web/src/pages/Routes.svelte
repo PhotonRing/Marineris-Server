@@ -38,7 +38,8 @@
       hub_title: '',
       hub_subtitle: '',
       has_icon: false,
-      icon_mode: 'keep', // keep | name | url | upload | remove
+      icon_mode: 'keep', // keep | stack | name | url | upload | remove
+      icon_stack: '', // "stack" or "stack/service" (icon_mode stack)
       icon_name: '',
       icon_url: '',
       icon_data: '',
@@ -46,20 +47,24 @@
   }
 
   async function load() {
+    // Containers and stack icons are optional (Docker may be unreachable).
+    const optional = Promise.all([get('/api/containers').catch(() => []), get('/api/stack-icons').catch(() => [])]);
     try {
       [routes, domains] = await Promise.all([get('/api/routes'), get('/api/domains')]);
     } catch (err) {
       error = describe(err);
     }
-    try {
-      containers = await get('/api/containers');
-    } catch {
-      containers = [];
-    }
+    [containers, stackIcons] = await optional;
+    loaded = true;
   }
   onMount(load);
 
   let selected = $derived(containers.find((c) => c.name === form.container));
+  // Icons of stacks and their services that a route can reuse.
+  let stackIcons = $state([]);
+  let loaded = $state(false);
+  const iconKey = (i) => (i.service ? `${i.stack}/${i.service}` : i.stack);
+  let stackIconPreview = $derived(stackIcons.find((i) => iconKey(i) === form.icon_stack)?.icon || '');
 
   function pickContainer(e) {
     form.container = e.currentTarget.value;
@@ -70,7 +75,12 @@
       form.port = c.ports.find((p) => preferred.includes(p)) || c.ports[0];
     }
     if (!form.name) form.name = form.container;
-    if (c && !form.has_icon && form.icon_mode === 'keep') {
+    // A container of a stack service with an icon: use the same one.
+    const same = c && stackIcons.find((i) => i.stack === c.stack && i.service === c.service);
+    if (same && !form.has_icon && (form.icon_mode === 'keep' || form.icon_mode === 'name')) {
+      form.icon_mode = 'stack';
+      form.icon_stack = iconKey(same);
+    } else if (c && !form.has_icon && form.icon_mode === 'keep') {
       const slug = suggestSlug(c.image);
       if (slug) {
         form.icon_mode = 'name';
@@ -98,6 +108,10 @@
   }
 
   async function saveIcon(id) {
+    if (form.icon_mode === 'stack' && form.icon_stack) {
+      const [stack, service = ''] = form.icon_stack.split('/');
+      return put(`/api/routes/${id}/icon`, { stack, service });
+    }
     if (form.icon_mode === 'name' && form.icon_name.trim()) return put(`/api/routes/${id}/icon`, { name: form.icon_name.trim() });
     if (form.icon_mode === 'url' && form.icon_url.trim()) return put(`/api/routes/${id}/icon`, { url: form.icon_url.trim() });
     if (form.icon_mode === 'upload' && form.icon_data) return put(`/api/routes/${id}/icon`, { data: form.icon_data });
@@ -212,7 +226,7 @@
 <div class="stack">
   <div class="spread">
     <p class="muted small">Every change is validated, applied to Caddy, health-checked and rolled back automatically on failure.</p>
-    <button class="primary" onclick={create} disabled={!domains.length}>New route</button>
+    <button class="primary" onclick={create} disabled={!loaded || !domains.length} title="Publish a container, a host of your network or a static folder">New route</button>
   </div>
   {#if !domains.length}
     <div class="alert">Add a domain first on the <a href="/domains" use:link>Domains</a> page.</div>
@@ -357,13 +371,24 @@
           {#if form.has_icon && form.id}<img class="tile-icon" src={iconURL(form.id)} alt="Current icon" />{/if}
           <select id="hbi" bind:value={form.icon_mode}>
             <option value="keep">{form.has_icon ? 'Keep the current icon' : 'Initials (no icon)'}</option>
+            {#if stackIcons.length}<option value="stack">Same as a stack or service</option>{/if}
             <option value="name">By name (dashboard-icons)</option>
             <option value="url">From an https:// URL</option>
             <option value="upload">Upload a file</option>
             {#if form.has_icon}<option value="remove">Remove the icon</option>{/if}
           </select>
         </div>
-        {#if form.icon_mode === 'name'}
+        {#if form.icon_mode === 'stack'}
+          <div class="row mt nowrap">
+            <select bind:value={form.icon_stack} aria-label="Stack or service whose icon to use">
+              {#each stackIcons as i (iconKey(i))}
+                <option value={iconKey(i)}>{i.service ? `${i.stack} › ${i.service}` : `${i.stack} (stack)`}</option>
+              {/each}
+            </select>
+            {#if stackIconPreview}<img class="tile-icon" src={stackIconPreview} alt="" />{/if}
+          </div>
+          <div class="help">The icon is copied: changing the service's icon later does not change the route's.</div>
+        {:else if form.icon_mode === 'name'}
           <input class="mt" bind:value={form.icon_name} placeholder="jellyfin" />
           <div class="help">Name from the dashboard-icons collection (e.g. jellyfin, nextcloud, home-assistant). Marineris downloads it once and serves it itself.</div>
         {:else if form.icon_mode === 'url'}

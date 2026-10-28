@@ -379,6 +379,19 @@ networks:
 		return nil
 	})
 
+	// --- Renaming a running stack keeps its data and its routes ----------
+	a.must("POST", "/api/stacks/demo/rename", map[string]any{"name": "demo-renamed"})
+	moved := a.must("GET", "/api/containers/it-web", nil)
+	if moved["stack"] != "demo-renamed" || !strings.Contains(fmt.Sprint(moved["mounts"]), "demo_files:/srv/files") {
+		t.Fatalf("renamed stack: stack %v, mounts %v (the volume must keep its name and data)", moved["stack"], moved["mounts"])
+	}
+	waitFor(t, "the renamed stack behind its route", time.Minute, func() error {
+		if status, _, _ := edgeGet(t, "https://web."+zone+"/", nil); status != 200 {
+			return fmt.Errorf("status %d", status)
+		}
+		return nil
+	})
+
 	// --- CrowdSec: a ban decision blocks the client at the edge ----------
 	if crowdsec {
 		cur := a.must("GET", "/api/config/components/caddy/current", nil)

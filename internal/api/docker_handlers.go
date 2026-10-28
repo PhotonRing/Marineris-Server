@@ -161,6 +161,7 @@ func (s *Server) handleStackList(w http.ResponseWriter, r *http.Request, rc *req
 		// A stack whose file cannot be read is still listed, without details.
 		if sum, err := s.stackServices(r.Context(), st, cs); err == nil {
 			item["state"], item["main"], item["icon"], item["services"] = sum.State, sum.Main, sum.Icon, len(sum.Services)
+			item["pending_changes"] = sum.PendingChanges
 		} else {
 			var ae *Error
 			if !errors.As(err, &ae) {

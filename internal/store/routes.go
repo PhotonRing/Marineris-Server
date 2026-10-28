@@ -274,6 +274,28 @@ func (s *Store) ListStacks(ctx context.Context) ([]*Stack, error) {
 	return out, rows.Err()
 }
 
+// RenameStack renames a stack, with its new compose file and .env (sealed
+// for the new name), and moves its service icons.
+func (s *Store) RenameStack(ctx context.Context, oldName string, st *Stack) error {
+	st.UpdatedAt = s.now()
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE stacks SET name = ?, compose = ?, env = ?, updated_at = ? WHERE name = ?`,
+			st.Name, st.Compose, st.Env, st.UpdatedAt, oldName)
+		if isUnique(err) {
+			return ErrConflict
+		}
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrNotFound
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE images SET key = ? || substr(key, ?) WHERE kind = ? AND substr(key, 1, ?) = ?`,
+			st.Name+"/", len(oldName)+2, ImageService, len(oldName)+1, oldName+"/")
+		return err
+	})
+}
+
 // DeleteStack deletes a stack record.
 func (s *Store) DeleteStack(ctx context.Context, name string) error {
 	return s.execOne(ctx, `DELETE FROM stacks WHERE name = ?`, name)

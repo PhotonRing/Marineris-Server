@@ -44,11 +44,12 @@
   of the stack, another existing one or a new one — or host folder,
   read-only), networks, ports and labels (with suggestions for the Marineris
   labels), all written back to `compose.yaml` and checked against the policy;
-  or edit the whole file. Icons are picked automatically from the image name
+  or edit the whole file. Stacks can be renamed, keeping their data. Icons are picked automatically from the image name
   ([dashboard-icons](https://github.com/homarr-labs/dashboard-icons)), or set
   with an `io.marineris.icon` label or from the UI; the stack takes the icon
   of its main service (`io.marineris.main: "true"`, else the one published by
-  a route, else the first one).
+  a route, else the first one). A route can reuse the icon of a stack or of
+  one of its services.
 - **Routes.** Pick a container (its port is selected automatically), an external
   host (LAN appliance, other server) or a static folder / single-page app.
   Per-route Authelia 2FA protection — for everyone with an account, or

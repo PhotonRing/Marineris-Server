@@ -12,6 +12,7 @@ import (
 	"github.com/photonring/marineris-server/internal/icons"
 	"github.com/photonring/marineris-server/internal/stacks"
 	"github.com/photonring/marineris-server/internal/store"
+	"github.com/photonring/marineris-server/internal/validate"
 )
 
 // Status of a service or a stack, from its containers.
@@ -71,6 +72,8 @@ type stackSummary struct {
 	// mounts may come from besides the stack's folder.
 	Volumes   []string `json:"volumes"`
 	BindRoots []string `json:"bind_roots"`
+	// PendingChanges: the file was saved after the last deployment.
+	PendingChanges bool `json:"pending_changes"`
 }
 
 // stackServices describes the services of a stack: definition, containers,
@@ -78,7 +81,8 @@ type stackSummary struct {
 // labelled io.marineris.main, else the first one published by a route, else
 // the first one of the file.
 func (s *Server) stackServices(ctx context.Context, st *store.Stack, containers []docker.Container) (stackSummary, error) {
-	sum := stackSummary{Services: []serviceView{}, Volumes: stacks.TopVolumes([]byte(st.Compose)), BindRoots: []string{}}
+	sum := stackSummary{Services: []serviceView{}, Volumes: stacks.TopVolumes([]byte(st.Compose)), BindRoots: []string{},
+		PendingChanges: st.DeployedAt != nil && st.UpdatedAt.After(*st.DeployedAt)}
 	if s.Stacks != nil {
 		sum.BindRoots = s.Stacks.BindRoots()
 	}
@@ -499,4 +503,210 @@ func (s *Server) fetchServiceIcons(st *store.Stack) {
 			}
 		}
 	}()
+}
+
+// handleStackRename renames a stack. A deployed stack is taken down and
+// deployed again under its new name; its volumes keep their data (their
+// current names are written into the file) and routes to its containers
+// follow the new container names.
+func (s *Server) handleStackRename(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
+	if err := s.requireStacks(); err != nil {
+		return err
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decode(r, &req); err != nil {
+		return err
+	}
+	ctx := context.WithoutCancel(r.Context())
+	st, err := s.Store.GetStack(ctx, r.PathValue("name"))
+	if err != nil {
+		return err
+	}
+	oldName, newName := st.Name, strings.TrimSpace(req.Name)
+	if err := validate.StackName(newName); err != nil {
+		return fieldError("name", err.Error())
+	}
+	if newName == oldName {
+		return ok(w, map[string]string{"name": newName})
+	}
+	if _, err := s.Store.GetStack(ctx, newName); err == nil {
+		return &Error{Status: http.StatusConflict, Code: "conflict", Message: "a stack named " + newName + " already exists"}
+	}
+	env, err := s.stackEnv(st)
+	if err != nil {
+		return err
+	}
+	cs := s.listContainers(ctx)
+	var own []docker.Container
+	for _, c := range cs {
+		if c.Stack == oldName {
+			own = append(own, c)
+		}
+	}
+	deployed := len(own) > 0
+	compose := []byte(st.Compose)
+	if deployed {
+		if compose, err = stacks.PinVolumeNames(compose, oldName); err != nil {
+			return badRequest(err.Error())
+		}
+	}
+	vs, err := s.Stacks.Check(ctx, newName, compose, []byte(env))
+	if err != nil {
+		return badRequest(err.Error())
+	}
+	if blocking := stacks.Blocking(vs, st.UnsafeAck); len(blocking) > 0 {
+		return &stacks.PolicyError{Violations: blocking}
+	}
+	sealed, err := s.sealEnv(newName, env)
+	if err != nil {
+		return err
+	}
+	if deployed {
+		if err := s.Stacks.Down(ctx, oldName, false); err != nil {
+			return dockerErr(err)
+		}
+	}
+	next := *st
+	next.Name, next.Compose, next.Env = newName, string(compose), sealed
+	if err := s.Store.RenameStack(ctx, oldName, &next); err != nil {
+		return err
+	}
+	if err := s.Stacks.Remove(oldName); err != nil {
+		s.Log.Warn("removing the old stack folder failed", "stack", oldName, "err", err)
+	}
+	s.audit(r, rc, "stack.rename", oldName, true, "renamed to "+newName)
+	if !deployed {
+		return ok(w, map[string]string{"name": newName})
+	}
+
+	if err := s.Stacks.Deploy(ctx, newName, compose, []byte(env), next.UnsafeAck); err != nil {
+		s.audit(r, rc, "stack.deploy", newName, false, err.Error())
+		return dockerErr(err)
+	}
+	if err := s.Store.MarkStackDeployed(ctx, newName); err != nil {
+		return err
+	}
+	s.fetchServiceIcons(&next)
+	// Containers without a fixed container_name are called <stack>-<service>-<n>.
+	renamed := map[string]string{}
+	for _, c := range own {
+		if rest, ok := strings.CutPrefix(c.Name, oldName+"-"); ok {
+			renamed[c.Name] = newName + "-" + rest
+		}
+	}
+	routes, err := s.Store.ListRoutes(ctx)
+	if err != nil {
+		return err
+	}
+	changed := false
+	for _, rt := range routes {
+		to, ok := renamed[rt.Target.Container]
+		if rt.Kind != store.RouteContainer || !ok {
+			continue
+		}
+		rt.Target.Container = to
+		if err := s.Store.UpdateRoute(ctx, rt); err != nil {
+			return err
+		}
+		changed = true
+	}
+	for _, c := range own {
+		if to, ok := renamed[c.Name]; ok && c.Routable && s.Docker != nil {
+			if err := s.Docker.ConnectToApps(ctx, to); err != nil {
+				s.Log.Warn("reattaching a renamed container to the apps network failed", "container", to, "err", err)
+			}
+		}
+	}
+	if changed {
+		if err := s.commit(ctx, rc, "stack "+oldName+" renamed to "+newName, affectsCaddy, nil); err != nil {
+			return err
+		}
+	}
+	return ok(w, map[string]string{"name": newName})
+}
+
+// handleStackStart starts the stopped containers of a stack.
+func (s *Server) handleStackStart(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
+	if err := s.requireDocker(); err != nil {
+		return err
+	}
+	ctx := context.WithoutCancel(r.Context())
+	st, err := s.Store.GetStack(ctx, r.PathValue("name"))
+	if err != nil {
+		return err
+	}
+	cs, err := s.Docker.List(ctx)
+	if err != nil {
+		return dockerErr(err)
+	}
+	n := 0
+	for _, c := range cs {
+		if c.Stack == st.Name && c.State != "running" {
+			n++
+			if err := s.Docker.Action(ctx, c.Name, "start"); err != nil {
+				s.audit(r, rc, "stack.start", st.Name, false, err.Error())
+				return dockerErr(err)
+			}
+		}
+	}
+	s.audit(r, rc, "stack.start", st.Name, true, strconv.Itoa(n)+" containers started")
+	return ok(w, map[string]bool{"ok": true})
+}
+
+// stackIcon is an icon a route can reuse: a stack's (its main service's) or
+// a service's own.
+type stackIcon struct {
+	Stack   string `json:"stack"`
+	Service string `json:"service,omitempty"`
+	Icon    string `json:"icon"`
+}
+
+// handleStackIcons lists the custom icons of the stacks and their services.
+func (s *Server) handleStackIcons(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
+	ctx := r.Context()
+	list, err := s.Store.ListStacks(ctx)
+	if err != nil {
+		return err
+	}
+	cs := s.listContainers(ctx)
+	out := []stackIcon{}
+	for _, st := range list {
+		sum, err := s.stackServices(ctx, st, cs)
+		if err != nil {
+			continue
+		}
+		for _, v := range sum.Services {
+			if v.IconSource != "custom" {
+				continue
+			}
+			if v.Main {
+				out = append(out, stackIcon{Stack: st.Name, Icon: v.Icon})
+			}
+			out = append(out, stackIcon{Stack: st.Name, Service: v.Name, Icon: v.Icon})
+		}
+	}
+	return ok(w, out)
+}
+
+// serviceIconFor returns the custom icon of a stack's service, or of its
+// main service when service is empty.
+func (s *Server) serviceIconFor(ctx context.Context, stack, service string) (*store.Image, error) {
+	st, err := s.Store.GetStack(ctx, stack)
+	if err != nil {
+		return nil, err
+	}
+	if service == "" {
+		sum, err := s.stackServices(ctx, st, s.listContainers(ctx))
+		if err != nil {
+			return nil, err
+		}
+		service = sum.Main
+	}
+	im, err := s.Store.GetImage(ctx, store.ImageService, st.Name+"/"+service)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, fieldError("stack", "this stack or service has no icon of its own")
+	}
+	return im, err
 }

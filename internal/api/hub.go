@@ -79,6 +79,9 @@ func (s *Server) handleRouteIconSet(w http.ResponseWriter, r *http.Request, rc *
 		Data string `json:"data"` // base64
 		URL  string `json:"url"`
 		Name string `json:"name"` // dashboard-icons slug
+		// The icon of a stack (its main service) or of one of its services.
+		Stack   string `json:"stack"`
+		Service string `json:"service"`
 	}
 	if err := decode(r, &req); err != nil {
 		return err
@@ -91,6 +94,12 @@ func (s *Server) handleRouteIconSet(w http.ResponseWriter, r *http.Request, rc *
 	var data []byte
 	var ct string
 	switch {
+	case req.Stack != "":
+		im, err := s.serviceIconFor(ctx, req.Stack, req.Service)
+		if err != nil {
+			return err
+		}
+		ct, data = im.ContentType, im.Data
 	case req.Data != "":
 		if ct, data, err = decodeImage(req.Data); err != nil {
 			return err

@@ -189,7 +189,8 @@ function stackServices(s) {
   for (const v of services) v.main = v.name === main;
   let state = containersState(services.flatMap((v) => v.containers));
   if ((state === 'running' || state === 'starting') && services.some((v) => !v.containers.length)) state = 'partial';
-  return { main, icon: services.find((v) => v.main)?.icon || '', state, services, volumes: topVolumes(s.compose), bind_roots: ['/srv', '/mnt', '/media'] };
+  const pending = !!s.deployed_at && s.updated_at > s.deployed_at;
+  return { main, icon: services.find((v) => v.main)?.icon || '', state, services, volumes: topVolumes(s.compose), bind_roots: ['/srv', '/mnt', '/media'], pending_changes: pending };
 }
 
 function stackView(s) {
@@ -197,7 +198,7 @@ function stackView(s) {
   const sum = stackServices(s);
   return {
     name: s.name, containers: own.length, running: own.filter((c) => c.state === 'running').length, unsafe_ack: s.unsafe_ack, created_at: s.created_at, updated_at: s.updated_at, deployed_at: s.deployed_at,
-    state: sum.state, main: sum.main, icon: sum.icon, services: sum.services.length,
+    state: sum.state, main: sum.main, icon: sum.icon, services: sum.services.length, pending_changes: sum.pending_changes,
   };
 }
 
@@ -325,7 +326,12 @@ const routes = [
     const r = db.routes.find((x) => x.id === +p.id);
     if (!r) return notFound();
     let url = '';
-    if (b.name) {
+    if (b.stack) {
+      const s = db.stacks.find((x) => x.name === b.stack);
+      if (!s) return notFound();
+      url = db.serviceIcons.get(`${s.name}/${b.service || stackServices(s).main}`);
+      if (!url) return fail(400, 'invalid', 'stack: this stack or service has no icon of its own', { field: 'stack' });
+    } else if (b.name) {
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(b.name)) return fail(400, 'bad_request', "icons: an icon name uses lowercase letters, digits and '-'");
       url = `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${b.name}.png`;
     } else if (b.url) {
@@ -500,14 +506,47 @@ const routes = [
     audit('stack.update', s.name);
     return ok(s);
   }],
+  ['POST', '/api/stacks/{name}/rename', (p, b) => {
+    const s = db.stacks.find((x) => x.name === p.name);
+    if (!s) return notFound();
+    const to = (b.name || '').trim();
+    if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(to)) return fail(400, 'invalid', 'name: lowercase letters, digits, "-" and "_"', { field: 'name' });
+    if (to === s.name) return ok({ name: to });
+    if (db.stacks.some((x) => x.name === to)) return fail(409, 'conflict', `a stack named ${to} already exists`);
+    const from = s.name;
+    for (const c of db.containers.filter((x) => x.stack === from)) {
+      c.stack = to;
+      if (c.name.startsWith(`${from}-`)) {
+        const renamed = to + c.name.slice(from.length);
+        for (const r of db.routes) if (r.kind === 'container' && r.target.container === c.name) r.target.container = renamed;
+        c.name = renamed;
+      }
+    }
+    for (const [k, v] of [...db.serviceIcons]) if (k.startsWith(`${from}/`)) { db.serviceIcons.delete(k); db.serviceIcons.set(to + k.slice(from.length), v); }
+    for (const v of db.volumes) if (v.stack === from) v.stack = to;
+    s.name = to;
+    audit('stack.rename', from, `renamed to ${to}`);
+    return ok({ name: to });
+  }],
   ['POST', '/api/stacks/{name}/{action}', (p) => {
     const s = db.stacks.find((x) => x.name === p.name);
-    if (!s || !['deploy', 'down', 'restart', 'pull'].includes(p.action)) return notFound();
+    if (!s || !['deploy', 'down', 'restart', 'pull', 'start'].includes(p.action)) return notFound();
     if (p.action === 'down') db.containers = db.containers.filter((c) => c.stack !== s.name);
-    else if (p.action === 'restart') for (const c of db.containers.filter((x) => x.stack === s.name)) Object.assign(c, { state: 'running', status: 'Up less than a second' });
+    else if (p.action === 'restart' || p.action === 'start') for (const c of db.containers.filter((x) => x.stack === s.name)) Object.assign(c, { state: 'running', status: 'Up less than a second' });
     else converge(s);
     audit(`stack.${p.action === 'pull' ? 'update' : p.action}`, s.name);
     return ok({ ok: true });
+  }],
+  ['GET', '/api/stack-icons', () => {
+    const out = [];
+    for (const s of db.stacks) {
+      for (const v of stackServices(s).services) {
+        if (v.icon_source !== 'custom') continue;
+        if (v.main) out.push({ stack: s.name, icon: v.icon });
+        out.push({ stack: s.name, service: v.name, icon: v.icon });
+      }
+    }
+    return ok(out);
   }],
   ['GET', '/api/stacks/{name}/services', (p) => { const s = db.stacks.find((x) => x.name === p.name); return s ? ok(stackServices(s)) : notFound(); }],
   ['PUT', '/api/stacks/{name}/services/{service}', (p, b) => {
