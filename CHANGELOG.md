@@ -16,6 +16,37 @@ the list of commits and the image digests — then deletes merged branches.
 
 - **Online demo** on GitHub Pages, published with every release: the real web
   UI with sample data and an in-browser backend.
+- **Stack page** (Stacks → a stack): every service with its icon, status and
+  containers; stack actions (deploy, update images, restart, stop, delete) and
+  service actions (start/stop, restart, recreate, update image); tabs for a
+  service's logs (with follow), environment, mounts, networks and ports — saved
+  into `compose.yaml` with comments and other services kept, checked against
+  the policy, optionally recreating the service — and its icon; the
+  `compose.yaml`/`.env` editor. The stacks list shows each stack's status and
+  the icon of its main service.
+- **Service icons**: downloaded once after a deployment from the image name or
+  an `io.marineris.icon` label, or set from the UI (name, URL or upload);
+  `io.marineris.main: "true"` picks the stack's main service.
+- **Administrators-only routes**: a third access policy next to public and
+  2FA, enforced by Authelia (group `admins`).
+- **Branding from the UI** (Settings → Branding): name, accent colour,
+  favicon, header icon and background image.
+
+### Changed
+
+- The public Marineris UI host is restricted to administrators in Authelia
+  (it was open to any Authelia account; there are no others yet).
+- The hub background covers the whole window (it stopped at the content
+  column on wide screens, leaving dark bands).
+
+### Security
+
+- The stack policy refuses the `io.marineris.system` label, which would have
+  let a user stack pass for a protected Marineris container.
+
+### Fixed
+
+- The demo banner no longer makes every page scroll.
 
 ## [0.1.0] - 2026-10-27
 

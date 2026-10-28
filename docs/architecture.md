@@ -83,8 +83,12 @@ CPU, memory, uptime and load come from `/proc` (not namespaced: they are the
 host's values), disk usage from the filesystem of the data directory. Network
 counters are per namespace, so compose.yml bind-mounts the host's
 `/proc/1/net/dev` read-only at `/host/net-dev` (counters only, no other host
-information). Hub icons are stored in the database and served by Marineris;
-remote icons are downloaded once over HTTPS from public addresses only.
+information). Hub icons, service icons and branding images are stored in the database and
+served by Marineris (the browser never loads third-party images); remote
+icons are downloaded once over HTTPS from public addresses only. After a stack
+is deployed, Marineris looks up an icon for each service that has none on the
+dashboard-icons CDN (cdn.jsdelivr.net), by its `io.marineris.icon` label or
+its image name: the only request it makes without being asked to.
 
 ## Networks
 
