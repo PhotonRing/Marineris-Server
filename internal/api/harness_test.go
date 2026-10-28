@@ -105,14 +105,15 @@ func (fakeStacks) Remove(string) error                      { return nil }
 func (fakeStacks) BindRoots() []string                      { return []string{"/srv"} }
 
 type env struct {
-	t      *testing.T
-	srv    *Server
-	store  *store.Store
-	caddy  *fakeCaddy
-	docker *fakeDocker
-	edge   *httptest.Server
-	local  *httptest.Server
-	setup  *setup.Service
+	t            *testing.T
+	srv          *Server
+	store        *store.Store
+	caddy        *fakeCaddy
+	docker       *fakeDocker
+	edge         *httptest.Server
+	local        *httptest.Server
+	setup        *setup.Service
+	autheliaKeys *fakeAutheliaPasskeys
 }
 
 func newEnv(t *testing.T) *env {
@@ -135,21 +136,22 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(func() { st.Close() })
 	box, _ := secrets.NewBox(bytes.Repeat([]byte{4}, 32))
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	fc, fd := &fakeCaddy{}, &fakeDocker{}
+	fc, fd, fap := &fakeCaddy{}, &fakeDocker{}, &fakeAutheliaPasskeys{}
 	cm := configmgr.New(cfg, st, box, fc, fd, log)
 	cm.HealthTimeout = time.Second
 	cm.AutheliaHealth = func(context.Context) error { return nil }
 	sv := setup.New(st, box, cfg.SetupTokenPath())
 	srv := New(Deps{
 		Config: cfg, Store: st, Box: box, Setup: sv,
-		Sessions: auth.NewSessions(st, 30*time.Minute, 12*time.Hour),
-		Passkeys: auth.NewPasskeys(st, "Marineris"),
-		Throttle: auth.NewThrottle(),
-		Configs:  cm, Docker: fd, Stacks: fakeStacks{},
+		Sessions:         auth.NewSessions(st, 30*time.Minute, 12*time.Hour),
+		Passkeys:         auth.NewPasskeys(st, "Marineris"),
+		AutheliaPasskeys: fap,
+		Throttle:         auth.NewThrottle(),
+		Configs:          cm, Docker: fd, Stacks: fakeStacks{},
 		Log: log, Version: "test",
 		UI: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("<html>ui</html>")) }),
 	})
-	e := &env{t: t, srv: srv, store: st, caddy: fc, docker: fd, setup: sv}
+	e := &env{t: t, srv: srv, store: st, caddy: fc, docker: fd, setup: sv, autheliaKeys: fap}
 	// Runs before the TempDir cleanup (cleanups run last-in, first-out).
 	t.Cleanup(srv.Wait)
 	e.edge = httptest.NewServer(srv.Handler(Edge))

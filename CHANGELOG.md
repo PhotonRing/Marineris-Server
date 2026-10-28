@@ -18,6 +18,15 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+### Added
+
+- **Passkeys are added from the UI again.** Behind Authelia, **Account →
+  Passkeys** lists your passkeys, adds them and removes them, without the
+  Authelia portal and its e-mailed one-time code. The browser goes to the
+  sign-in page's address for a moment (a passkey belongs to the address it
+  is created on: there, it signs in to every app, the portal and the UI),
+  then comes back. Marineris checks the passkey and registers it in Authelia.
+
 ### Changed
 
 - **CI: image jobs back on GitHub's runners.** Measured on the first runs:

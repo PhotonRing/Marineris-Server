@@ -62,7 +62,8 @@
 - **Authentication.** One account and **one sign-in** for the portal, every
   protected route and the UI: Authelia signs in (password + TOTP, or a
   **passkey** alone), and the UI trusts that sign-in. Marineris registers each
-  user's authenticator in Authelia, so no e-mail server is needed. One-time
+  user's authenticator in Authelia, and passkeys are added from the UI's
+  **Account** page, so no e-mail server is needed. One-time
   recovery codes, step-up confirmation for sensitive actions, and a
   break-glass login of its own on the local listener.
 - **Shield.** CrowdSec bouncer in Caddy, per-IP rate limiting.

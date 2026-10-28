@@ -24,6 +24,10 @@ const (
 )
 
 // Headers copied from Authelia's forward-auth response to the upstream.
+// PortalPasskeyPath is the path, on the Authelia portal's hosts, of the
+// Marineris page that adds Authelia passkeys.
+const PortalPasskeyPath = "/marineris-passkey"
+
 var forwardAuthHeaders = []string{"Remote-User", "Remote-Groups", "Remote-Email", "Remote-Name"}
 
 // Domain is a managed domain with its (decrypted) DNS profile, if any.
@@ -324,6 +328,15 @@ func servers(in Input) obj {
 	}
 	if len(portals) > 0 {
 		sort.Strings(portals)
+		// The page that adds an Authelia passkey from the Marineris UI is
+		// Marineris': a passkey belongs to the host it is created on.
+		if UIServed(in) && in.Settings.UIProtectWithAuthelia {
+			page := shield(in, "authelia_portal", nil)
+			page = append(page,
+				obj{"handler": "headers", "request": obj{"delete": forwardAuthHeaders}},
+				obj{"handler": "reverse_proxy", "upstreams": []obj{{"dial": in.Env.MarinerisUpstream}}})
+			routes = append(routes, hostRoute(portals, PortalPasskeyPath, page))
+		}
 		chain := shield(in, "authelia_portal", nil)
 		chain = append(chain, obj{"handler": "reverse_proxy", "upstreams": []obj{{"dial": in.Env.AutheliaUpstream}}})
 		routes = append(routes, hostRoute(portals, "", chain))

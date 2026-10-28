@@ -1,3 +1,4 @@
+DELETE /api/account/authelia-passkeys/{id}        stepup  both
 DELETE /api/account/passkeys/{id}                 stepup  both
 DELETE /api/branding/{asset}                      stepup  both
 DELETE /api/containers/{id}                       stepup  both
@@ -8,6 +9,7 @@ DELETE /api/routes/{id}/icon                      authed  both
 DELETE /api/stacks/{name}                         stepup  both
 DELETE /api/stacks/{name}/icons/{service}         authed  both
 DELETE /api/volumes/{name}                        stepup  both
+GET    /api/account/authelia-passkeys             authed  both
 GET    /api/account/passkeys                      authed  both
 GET    /api/audit                                 authed  both
 GET    /api/auth/session                          authed  both
@@ -39,6 +41,7 @@ GET    /api/stacks/{name}/icons/{service}         authed  both
 GET    /api/stacks/{name}/services                authed  both
 GET    /api/system/stats                          authed  both
 GET    /api/volumes                               authed  both
+POST   /api/account/authelia-passkeys             stepup  both
 POST   /api/account/passkeys/begin                stepup  both
 POST   /api/account/passkeys/finish               stepup  both
 POST   /api/account/password                      stepup  both
@@ -76,6 +79,8 @@ POST   /api/stacks/{name}/services/{service}/start authed  both
 POST   /api/stacks/{name}/services/{service}/stop authed  both
 POST   /api/stacks/{name}/services/{service}/update authed  both
 POST   /api/stacks/{name}/start                   authed  both
+POST   /marineris-passkey/api/begin               ticket  edge
+POST   /marineris-passkey/api/finish              ticket  edge
 PUT    /api/branding                              stepup  both
 PUT    /api/branding/{asset}                      stepup  both
 PUT    /api/dns/profiles/{id}                     stepup  both

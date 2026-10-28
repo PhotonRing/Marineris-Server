@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Add a passkey</title>
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="passkey.css" />
+    <script type="module" src="passkey.js"></script>
+  </head>
+  <body>
+    <main class="card">
+      <!-- The brand's logo, as the Authelia portal shows it. -->
+      <img class="logo" src="/static/media/logo.png" alt="" />
+      <h1>Add a passkey</h1>
+      <p id="what" class="muted">Loading…</p>
+      <p id="status" class="status" role="status" hidden></p>
+      <div class="row">
+        <button id="create" class="primary" type="button" hidden>Create the passkey</button>
+        <a id="back" class="btn" href="/" hidden>Back</a>
+      </div>
+    </main>
+  </body>
+</html>

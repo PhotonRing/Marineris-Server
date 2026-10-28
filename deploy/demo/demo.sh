@@ -152,7 +152,7 @@ Marineris is running on this computer.
    Authelia (https://auth.marineris.localhost) asks for your password, then
    for a code of the authenticator app set up in step 1. That one sign-in
    opens the app, the portal and the Marineris UI. A passkey added in the
-   portal (Account -> Passkeys) then signs in alone, everywhere.
+   UI (Account -> Passkeys) then signs in alone, everywhere.
 
 Stop and delete everything:  deploy/demo/demo.sh down
 EOF

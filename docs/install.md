@@ -72,7 +72,9 @@ host → **store the recovery codes**.
    with the same password and authenticator app (Marineris registers them in
    Authelia), and that one sign-in opens the UI, the portal and every
    protected route. To sign in with a **passkey** everywhere, add it in
-   **Account → Passkeys → Authelia portal**.
+   **Account → Passkeys**: the browser goes to the sign-in page's address for
+   a moment (a passkey belongs to the address it is created on), then comes
+   back.
 5. **Routes** → publish applications.
 6. When certificates show as *staging* everywhere and everything works,
    **Settings → untick "staging"**. Production certificates replace them.
