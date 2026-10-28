@@ -18,6 +18,25 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-10-28
+
+Passkeys are added where they sign you in.
+
+**Upgrading from 0.1.7:** in `.env`, set `MARINERIS_IMAGE` and
+`MARINERIS_CADDY_IMAGE` to the `0.1.8` tags, then
+`docker compose pull && docker compose up -d`. If **Account → Passkeys**
+lists passkeys, remove them there and in your password manager, then add
+yours from the same card.
+
+### Fixed
+
+- **Passkey sign-in failed with "user not found"** when the passkey had been
+  added from **Account** on the public UI: such a passkey belonged to this
+  interface only, could not sign in (Authelia does), yet password managers
+  offered it on the sign-in page. Behind Authelia, **Account → Passkeys** now
+  opens the Authelia portal to add or manage passkeys, and flags the old
+  interface-only ones for removal.
+
 ### Changed
 
 - **CI runs on the project's self-hosted runner**, except pull requests from
@@ -330,7 +349,8 @@ First public version: Phase 1.
   the real stack with a test ACME CA, gitleaks, govulncheck, Trivy, CodeQL,
   OWASP ZAP; multi-arch signed images with SBOM and provenance.
 
-[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.4...v0.1.5

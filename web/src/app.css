@@ -331,6 +331,9 @@ button,
   white-space: nowrap;
 }
 button:hover:not(:disabled),
+a.btn {
+  text-decoration: none;
+}
 .btn:hover {
   border-color: var(--accent);
 }
@@ -341,7 +344,8 @@ button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
-button.primary {
+button.primary,
+.btn.primary {
   background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 80%, black));
   border-color: transparent;
   color: #fff;

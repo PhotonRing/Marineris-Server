@@ -114,48 +114,70 @@
   <div class="card">
     <h2>Passkeys</h2>
     {#if app.meta.portal_url}
+      <!-- Behind Authelia, its sign-in is the sign-in: a passkey that signs in
+           (to every app, the portal and this interface) is Authelia's. -->
       <p class="small">
-        To sign in with a passkey (Face ID, Touch ID, Windows Hello or a security key) to every app, the Authelia portal and
-        this interface, add it in the
-        <a href={`${app.meta.portal_url}/settings/two-factor-authentication`} target="_blank" rel="noopener noreferrer">Authelia portal</a>:
-        it asks for your authenticator code to confirm.
+        Sign in without a password, with Face ID, Touch ID, Windows Hello or a security key, to every app, the Authelia
+        portal and this interface. Passkeys are kept by the Authelia portal.
       </p>
-      <p class="small muted">
-        The passkeys below only confirm sensitive actions on {app.meta.ui_host}. Passkeys for the break-glass listener are added
-        there (localhost, through the SSH tunnel).
-      </p>
+      <div class="row mt">
+        <a class="btn primary" href={`${app.meta.portal_url}/settings/two-factor-authentication`} target="_blank" rel="noopener noreferrer">
+          Add or manage passkeys
+        </a>
+      </div>
+      {#if passkeys.length}
+        <div class="alert warning mt">
+          The passkeys below were added to this interface only. They cannot sign you in, and a password manager may still offer
+          them on the sign-in page, where they fail. Remove them, here and in your password manager.
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Added</th><th>Last used</th><th></th></tr></thead>
+            <tbody>
+              {#each passkeys as p (p.id)}
+                <tr>
+                  <td>{p.name}</td>
+                  <td class="small">{new Date(p.created_at).toLocaleString()}</td>
+                  <td class="small">{p.last_used_at ? new Date(p.last_used_at).toLocaleString() : 'never'}</td>
+                  <td class="right"><button class="small danger" onclick={() => removePasskey(p)}>Remove</button></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
     {:else}
       <p class="small muted">
         Sign in without a password using Face ID, Touch ID, Windows Hello or a security key. Passkeys are tied to the address
         you register them on ({app.meta.listener === 'local' ? 'localhost, through the SSH tunnel' : app.meta.ui_host}).
       </p>
-    {/if}
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Name</th><th>Added</th><th>Last used</th><th></th></tr></thead>
-        <tbody>
-          {#each passkeys as p (p.id)}
-            <tr>
-              <td>{p.name}</td>
-              <td class="small">{new Date(p.created_at).toLocaleString()}</td>
-              <td class="small">{p.last_used_at ? new Date(p.last_used_at).toLocaleString() : 'never'}</td>
-              <td class="right"><button class="small danger" onclick={() => removePasskey(p)}>Remove</button></td>
-            </tr>
-          {:else}
-            <tr><td colspan="4" class="muted">No passkeys yet.</td></tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-    {#if passkeysSupported()}
-      <div class="row mt">
-        <!-- A label, not a credential: password managers must not offer to fill it. -->
-        <input class="w-full" bind:value={passkeyName} placeholder="Name, e.g. “MacBook Touch ID”" maxlength="64"
-          autocomplete="off" data-protonpass-ignore="true" data-1p-ignore data-bwignore data-lpignore="true" />
-        <button class="primary" onclick={addPasskey}>Add passkey</button>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Added</th><th>Last used</th><th></th></tr></thead>
+          <tbody>
+            {#each passkeys as p (p.id)}
+              <tr>
+                <td>{p.name}</td>
+                <td class="small">{new Date(p.created_at).toLocaleString()}</td>
+                <td class="small">{p.last_used_at ? new Date(p.last_used_at).toLocaleString() : 'never'}</td>
+                <td class="right"><button class="small danger" onclick={() => removePasskey(p)}>Remove</button></td>
+              </tr>
+            {:else}
+              <tr><td colspan="4" class="muted">No passkeys yet.</td></tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
-    {:else}
-      <p class="small muted">This browser or address cannot use passkeys (use https or http://localhost).</p>
+      {#if passkeysSupported()}
+        <div class="row mt">
+          <!-- A label, not a credential: password managers must not offer to fill it. -->
+          <input class="w-full" bind:value={passkeyName} placeholder="Name, e.g. “MacBook Touch ID”" maxlength="64"
+            autocomplete="off" data-protonpass-ignore="true" data-1p-ignore data-bwignore data-lpignore="true" />
+          <button class="primary" onclick={addPasskey}>Add passkey</button>
+        </div>
+      {:else}
+        <p class="small muted">This browser or address cannot use passkeys (use https or http://localhost).</p>
+      {/if}
     {/if}
   </div>
 
