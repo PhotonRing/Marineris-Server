@@ -25,6 +25,11 @@ the list of commits and the image digests — then deletes merged branches.
   distribution, every image pull failed with `exec format error`. The demo
   now detects it and pulls its public images without the helper, leaving
   your Docker configuration untouched.
+- **`deploy/demo/demo.sh up` with Docker Desktop.** `marineris-init` failed
+  with `crowdsec-bouncer.key is not a regular file`: Docker Desktop created
+  the missing key as a directory when compose created the CrowdSec
+  container. The demo now prepares the data directory before starting the
+  stack.
 
 ## [0.1.3] - 2026-10-28
 

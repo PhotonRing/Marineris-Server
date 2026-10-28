@@ -110,6 +110,13 @@ MARINERIS_CADDY_IMAGE=marineris-caddy:demo
 MARINERIS_ALLOWED_BIND_ROOTS=$DATA/stacks
 EOF
 
+  # Docker Desktop creates a missing bind-mount source as a directory when
+  # compose creates the containers, before marineris-init runs: the secrets
+  # mounted as files (CrowdSec's bouncer key) must exist first.
+  docker run --rm --user 65532:65532 --read-only --network none --cap-drop ALL \
+    --security-opt no-new-privileges:true -e MARINERIS_DATA_DIR="$DATA" \
+    -v "$DATA:$DATA" marineris:demo init >/dev/null
+
   echo "==> Starting the stack"
   compose up -d --quiet-pull
   i=0
