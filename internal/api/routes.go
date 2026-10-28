@@ -115,6 +115,7 @@ func (s *Server) table() []Route {
 
 		// Stacks
 		{G, "/api/stacks", Authed, false, s.handleStackList},
+		{G, "/api/stack-icons", Authed, false, s.handleStackIcons},
 		{P, "/api/stacks", Authed, false, s.handleStackCreate},
 		{P, "/api/stacks/check", Authed, false, s.handleStackCheck},
 		{G, "/api/stacks/{name}", Authed, false, s.handleStackGet},
@@ -122,6 +123,8 @@ func (s *Server) table() []Route {
 		{P, "/api/stacks/{name}/deploy", Authed, false, s.handleStackDeploy},
 		{P, "/api/stacks/{name}/down", Authed, false, s.handleStackDown},
 		{P, "/api/stacks/{name}/restart", Authed, false, s.handleStackRestart},
+		{P, "/api/stacks/{name}/start", Authed, false, s.handleStackStart},
+		{P, "/api/stacks/{name}/rename", Authed, false, s.handleStackRename},
 		{P, "/api/stacks/{name}/pull", Authed, false, s.handleStackPull},
 		{G, "/api/stacks/{name}/services", Authed, false, s.handleStackServices},
 		{U, "/api/stacks/{name}/services/{service}", Authed, false, s.handleServiceUpdate},

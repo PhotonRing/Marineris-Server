@@ -112,6 +112,8 @@ test('a stack: services with status and icons, editing a service, actions', asyn
   await page.getByLabel('Mount 2 path in the container').fill('/var/run/docker.sock');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText(/security policy/)).toBeVisible();
+  // A refused change stays in the form, to be corrected.
+  await expect(page.getByLabel('Mount 2 host folder')).toHaveValue('/var/run/docker.sock');
   expect(problems).toEqual([]);
 });
 
@@ -177,5 +179,47 @@ test('a service: labels with suggestions, typed mounts', async ({ page }) => {
   await page.getByLabel('Mount 1 path in the container').fill('config');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText(/must be absolute/)).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
+test('stack buttons fit the state and explain themselves; rename', async ({ page }) => {
+  const problems = watch(page);
+  await page.goto('./#/stacks/media');
+  const header = page.locator('.card').first();
+  // A running stack offers "Apply changes", not "Deploy", and every button has a tooltip.
+  await expect(header.getByRole('button', { name: 'Apply changes' })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Deploy', exact: true })).toHaveCount(0);
+  for (const b of await header.getByRole('button').all()) expect(await b.getAttribute('title')).toBeTruthy();
+  for (const b of await page.locator('.service-panel .spread').first().getByRole('button').all()) expect(await b.getAttribute('title')).toBeTruthy();
+  // Saving a service without recreating it leaves changes to apply.
+  await page.getByRole('tab', { name: 'Environment' }).click();
+  await page.getByLabel('Value 2', { exact: true }).fill('https://films.mars.example');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('changes not applied')).toBeVisible();
+  await header.getByRole('button', { name: 'Apply changes' }).click();
+  await expect(page.getByText('changes not applied')).toHaveCount(0);
+  // Rename.
+  await header.getByRole('button', { name: 'Rename' }).click();
+  await page.getByLabel('New name').fill('films');
+  await page.getByRole('button', { name: 'Rename', exact: true }).last().click();
+  await expect(page.getByText('Stack renamed to films')).toBeVisible();
+  expect(page.url()).toContain('#/stacks/films');
+  await page.getByRole('link', { name: 'All stacks' }).click();
+  await expect(page.getByRole('link', { name: /films/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^media/ })).toHaveCount(0);
+  expect(problems).toEqual([]);
+});
+
+test('a route reuses the icon of a stack service', async ({ page }) => {
+  const problems = watch(page);
+  await page.goto('./#/routes');
+  await page.getByRole('button', { name: 'New route' }).click();
+  await page.getByLabel('Container', { exact: true }).selectOption('jellyseerr');
+  await expect(page.getByLabel('Icon', { exact: true })).toHaveValue('stack');
+  await expect(page.getByLabel('Stack or service whose icon to use')).toHaveValue('media/jellyseerr');
+  await page.getByLabel('Subdomain').fill('requests');
+  await page.getByRole('button', { name: 'Save & apply' }).click();
+  await page.getByRole('link', { name: 'Hub', exact: true }).click();
+  await expect(page.getByRole('link', { name: /^jellyseerr/ }).locator('img')).toHaveAttribute('src', /^data:image\/svg/);
   expect(problems).toEqual([]);
 });

@@ -32,6 +32,7 @@ GET    /api/networks                              authed  both
 GET    /api/overview                              authed  both
 GET    /api/routes                                authed  both
 GET    /api/settings                              authed  both
+GET    /api/stack-icons                           authed  both
 GET    /api/stacks                                authed  both
 GET    /api/stacks/{name}                         authed  both
 GET    /api/stacks/{name}/icons/{service}         authed  both
@@ -67,12 +68,14 @@ POST   /api/stacks/check                          authed  both
 POST   /api/stacks/{name}/deploy                  authed  both
 POST   /api/stacks/{name}/down                    authed  both
 POST   /api/stacks/{name}/pull                    authed  both
+POST   /api/stacks/{name}/rename                  authed  both
 POST   /api/stacks/{name}/restart                 authed  both
 POST   /api/stacks/{name}/services/{service}/recreate authed  both
 POST   /api/stacks/{name}/services/{service}/restart authed  both
 POST   /api/stacks/{name}/services/{service}/start authed  both
 POST   /api/stacks/{name}/services/{service}/stop authed  both
 POST   /api/stacks/{name}/services/{service}/update authed  both
+POST   /api/stacks/{name}/start                   authed  both
 PUT    /api/branding                              stepup  both
 PUT    /api/branding/{asset}                      stepup  both
 PUT    /api/dns/profiles/{id}                     stepup  both

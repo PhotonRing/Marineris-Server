@@ -36,7 +36,8 @@ RUN --mount=type=secret,id=extra_ca,required=false \
       --with github.com/hslatman/caddy-crowdsec-bouncer/http@v0.14.2-0.20260909201224-ffdcb7c6f861 \
       --with github.com/mholt/caddy-ratelimit@v0.1.0 \
       --replace github.com/crowdsecurity/crowdsec=github.com/crowdsecurity/crowdsec@v1.7.8 \
-      --replace golang.org/x/net=golang.org/x/net@v0.61.0; \
+      --replace golang.org/x/net=golang.org/x/net@v0.61.0 \
+      --replace github.com/go-jose/go-jose/v4=github.com/go-jose/go-jose/v4@v4.1.6; \
     if [ "$TARGETARCH" = "$(go env GOARCH)" ]; then \
       for m in dns.providers.ovh dns.providers.cloudflare dns.providers.gandi dns.providers.infomaniak \
                dns.providers.route53 http.handlers.crowdsec http.handlers.rate_limit; do \

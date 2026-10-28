@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -125,4 +126,62 @@ func TestStackServices(t *testing.T) {
 	if _, err := e.store.GetImage(t.Context(), "service", "media/jellyfin"); err == nil {
 		t.Fatal("icons of a deleted stack are kept")
 	}
+}
+
+func TestStackRenameAndRouteIcons(t *testing.T) {
+	e := newEnv(t)
+	admin, _ := e.completeSetup()
+	must := func(method, path string, body any) resp {
+		t.Helper()
+		r := admin.do(method, path, body)
+		if r.Status != http.StatusOK {
+			t.Fatalf("%s %s: %d %s", method, path, r.Status, r.Raw)
+		}
+		return r
+	}
+	must("POST", "/api/domains", map[string]any{"name": "example.com"})
+	must("POST", "/api/stacks", map[string]any{"name": "media", "compose": testCompose + "volumes:\n  library: {}\n", "env": "TZ=UTC\n"})
+	must("PUT", "/api/stacks/media/icons/jellyfin", map[string]string{"data": pngPixel})
+	rt := must("POST", "/api/routes", map[string]any{"name": "films", "host": "films.example.com", "kind": "container",
+		"target": map[string]any{"container": "media-jellyfin-1", "port": 8096}, "auth": "none", "enabled": true})
+	routeID := int64(rt.Body["id"].(float64))
+
+	// Icons a route can reuse: the stack's (its main service) and the service's.
+	icons := must("GET", "/api/stack-icons", nil)
+	if !strings.Contains(string(icons.Raw), `"stack":"media","service":"jellyfin"`) {
+		t.Fatalf("stack icons: %s", icons.Raw)
+	}
+	if r := admin.do("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "helper"}); r.Status != http.StatusBadRequest {
+		t.Fatalf("service without an icon: %d %s", r.Status, r.Raw)
+	}
+	must("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "jellyfin"})
+	if r := must("GET", fmt.Sprintf("/api/hub/icons/%d", routeID), nil); r.Header.Get("Content-Type") != "image/png" {
+		t.Fatalf("route icon copied from the service: %v", r.Header)
+	}
+
+	// Rename: refused names and conflicts first.
+	must("POST", "/api/stacks", map[string]any{"name": "other", "compose": testCompose})
+	for name, code := range map[string]int{"Bad Name": 400, "other": 409, "": 400} {
+		if r := admin.do("POST", "/api/stacks/media/rename", map[string]string{"name": name}); r.Status != code {
+			t.Errorf("rename to %q: %d %s", name, r.Status, r.Raw)
+		}
+	}
+	must("POST", "/api/stacks/media/rename", map[string]string{"name": "films"})
+	if r := admin.do("GET", "/api/stacks/media", nil); r.Status != http.StatusNotFound {
+		t.Fatal("the old name still exists")
+	}
+	st := must("GET", "/api/stacks/films", nil)
+	// The stack was deployed: its volumes keep their data under the old names,
+	// the .env is still readable, the icons followed and the route too.
+	if !strings.Contains(st.Body["compose"].(string), "name: media_library") || st.Body["env"] != "TZ=UTC\n" {
+		t.Fatalf("renamed stack: %s", st.Raw)
+	}
+	if _, err := e.store.GetImage(t.Context(), "service", "films/jellyfin"); err != nil {
+		t.Fatal("the service icon did not follow the rename")
+	}
+	routes := must("GET", "/api/routes", nil)
+	if !strings.Contains(string(routes.Raw), `"container":"films-jellyfin-1"`) {
+		t.Fatalf("route target not renamed: %s", routes.Raw)
+	}
+	must("POST", "/api/stacks/films/start", nil)
 }

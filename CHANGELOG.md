@@ -18,6 +18,49 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-28
+
+Stacks you can rename, routes that reuse the icons of your stacks, and stack
+buttons that say what they do.
+
+**Upgrading from 0.1.1:** in `.env`, set `MARINERIS_IMAGE` and
+`MARINERIS_CADDY_IMAGE` to the `0.1.2` tags, then
+`docker compose pull && docker compose up -d`.
+
+### Added
+
+- **Rename a stack** (stack page → Rename). A running stack is stopped and
+  started again under its new name: its volumes keep their data (their
+  current names are written into `compose.yaml`), its service icons follow,
+  and routes to its containers are updated to the new container names.
+- **Routes can use the icon of a stack or of one of its services** (route →
+  Hub → Icon → "Same as a stack or service"). It is preselected when the
+  route's container belongs to a stack service that has an icon.
+- **Start** button on a stack whose containers are stopped.
+- "Changes not applied" badge when `compose.yaml` was saved after the last
+  deployment.
+
+### Changed
+
+- Stack buttons follow the stack's state and explain themselves: **Deploy**
+  only for a stack that is not deployed; on a running stack it becomes
+  **Apply changes** (highlighted when there is something to apply), next to
+  Start, Restart, Update images, Stop, Rename and Delete. Every button of
+  the stacks list and of the stack page has an icon and a tooltip saying
+  exactly what it does (and what it keeps).
+- The routes page loads containers and stack icons in parallel.
+
+### Fixed
+
+- Stack page: saving a service no longer clears the form of another service
+  picked meanwhile, nor the user's input when the change is refused.
+
+### Security
+
+- Caddy image: `go-jose` 4.1.6 (CVE-2026-116587, denial of service when
+  parsing JSON Web Keys with RSA keys), used by the DNS providers and ACME.
+  Upgrade from 0.1.1 to get it.
+
 ## [0.1.1] - 2026-10-28
 
 Phase 1, continued: a stack editor, branding, administrators-only routes and a
@@ -49,7 +92,6 @@ to Authelia's `admins` group, which every existing account belongs to.
   2FA, enforced by Authelia (group `admins`).
 - **Branding from the UI** (Settings → Branding): name, accent colour,
   favicon, header icon and background image.
-
 - **Proxy & SSO** overview: what Caddy serves (address, target, access, rate
   limit, certificate) and Authelia's access rules, portals, sessions and
   accounts, each with a link to the page that changes it.
@@ -128,6 +170,7 @@ First public version: Phase 1.
   the real stack with a test ACME CA, gitleaks, govulncheck, Trivy, CodeQL,
   OWASP ZAP; multi-arch signed images with SBOM and provenance.
 
-[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/PhotonRing/Marineris-Server/releases/tag/v0.1.0

@@ -175,3 +175,26 @@ func TestMountsAndLabels(t *testing.T) {
 		t.Error("bad label name accepted")
 	}
 }
+
+func TestPinVolumeNames(t *testing.T) {
+	in := "services:\n  a:\n    image: x\n    volumes: [data:/d, cache:/c, shared:/s, named:/n]\nvolumes:\n  data: {}\n  cache:\n  shared: {external: true}\n  named:\n    name: my-volume\n"
+	out, err := PinVolumeNames([]byte(in), "media")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, want := range []string{"name: media_data", "name: media_cache", "name: my-volume"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q in\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "media_shared") || strings.Contains(s, "media_named") {
+		t.Errorf("external or named volume renamed:\n%s", s)
+	}
+	if _, vs, err := manager(t).Load(context.Background(), "films", out, nil); err != nil || len(vs) != 0 {
+		t.Fatalf("pinned document: %v %+v", err, vs)
+	}
+	if same, _ := PinVolumeNames([]byte("services:\n  a:\n    image: x\n"), "m"); string(same) != "services:\n  a:\n    image: x\n" {
+		t.Fatal("a file without volumes must be unchanged")
+	}
+}

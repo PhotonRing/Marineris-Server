@@ -1,6 +1,15 @@
 <script>
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
   import Star from '@lucide/svelte/icons/star';
+  import Rocket from '@lucide/svelte/icons/rocket';
+  import CheckCheck from '@lucide/svelte/icons/check-check';
+  import Play from '@lucide/svelte/icons/play';
+  import Square from '@lucide/svelte/icons/square';
+  import RotateCw from '@lucide/svelte/icons/rotate-cw';
+  import RefreshCcw from '@lucide/svelte/icons/refresh-ccw';
+  import Download from '@lucide/svelte/icons/download';
+  import Pencil from '@lucide/svelte/icons/pencil';
+  import Trash2 from '@lucide/svelte/icons/trash-2';
   // One stack: its services with their status and actions, and per-service
   // tabs to read logs and edit the service (written back to compose.yaml).
   import { onMount, onDestroy } from 'svelte';
@@ -66,6 +75,9 @@
 
   // Delete.
   let deleteOpen = $state(false);
+  let renameOpen = $state(false);
+  let newName = $state('');
+  let renameError = $state('');
   let deleteConfirm = $state('');
   let deleteVolumes = $state(false);
 
@@ -181,6 +193,27 @@
   }
 
   const stackAction = (action, done) => run(action, () => post(`${base}/${action}`), done);
+
+  async function doRename(e) {
+    e.preventDefault();
+    renameError = '';
+    busy = 'rename';
+    try {
+      const res = await post(`${base}/rename`, { name: newName.trim() });
+      toast(`Stack renamed to ${res.name}`);
+      renameOpen = false;
+      navigate(`/stacks/${encodeURIComponent(res.name)}`, { replace: true });
+    } catch (err) {
+      renameError = describe(err);
+    } finally {
+      busy = '';
+    }
+  }
+
+  // What the stack buttons can do in its current state.
+  let deployed = $derived(summary && summary.state !== 'not_deployed');
+  let anyRunning = $derived(!!summary?.services.some((s) => s.containers.some((c) => c.state === 'running')));
+  let anyStopped = $derived(!!summary?.services.some((s) => s.containers.some((c) => c.state !== 'running')));
   const serviceAction = (action, done) => run(action, () => post(`${base}/services/${encodeURIComponent(selected)}/${action}`), done);
 
   async function saveService(deploy) {
@@ -191,16 +224,22 @@
     if (!long.has('volumes')) {
       body.mounts = form.mounts.map((m) => ({ type: m.type, source: m.source.trim(), target: m.target.trim(), read_only: m.read_only, external: !!m.external }));
     }
+    // The user may pick another service while this one is saved: only reset
+    // the form of the service that was saved, and only when it was saved
+    // (a refused change stays in the form to be corrected).
+    const service = selected;
+    let stored = false;
     await run(
       'save',
       async () => {
-        const res = await put(`${base}/services/${encodeURIComponent(selected)}`, body);
+        const res = await put(`${base}/services/${encodeURIComponent(service)}`, body);
         compose = res.compose;
         stack = { ...stack, compose: res.compose };
+        stored = true;
       },
-      deploy ? `${selected} saved and recreated` : `${selected} saved — recreate it to apply`,
+      deploy ? `${service} saved and recreated` : `${service} saved — recreate it to apply`,
     );
-    resetForm();
+    if (stored && selected === service) resetForm();
   }
 
   async function runCheck() {
@@ -280,16 +319,27 @@
           <div class="row small">
             <StateBadge state={summary.state} />
             <span class="muted">{summary.services.length} service{summary.services.length === 1 ? '' : 's'} · deployed {stack.deployed_at ? new Date(stack.deployed_at).toLocaleString() : 'never'}</span>
-            {#if stack.unsafe_ack}<span class="badge warn">unsafe allowed</span>{/if}
+            {#if stack.unsafe_ack}<span class="badge warn" title="This stack may use settings the security policy blocks by default">unsafe allowed</span>{/if}
+            {#if summary.pending_changes}<span class="badge warn" title="compose.yaml was saved after the last deployment: press Apply changes">changes not applied</span>{/if}
           </div>
         </div>
       </div>
       <div class="row">
-        <button class="primary" disabled={!!busy} onclick={() => stackAction('deploy', `${name} deployed`)} title="Create or update the containers from the saved compose file">{busy === 'deploy' ? 'Deploying…' : 'Deploy'}</button>
-        <button disabled={!!busy} onclick={() => stackAction('pull', `${name} updated`)} title="Pull newer images and recreate every service">{busy === 'pull' ? 'Updating…' : 'Update images'}</button>
-        <button disabled={!!busy || summary.state === 'not_deployed'} onclick={() => stackAction('restart', `${name} restarted`)}>Restart</button>
-        <button disabled={!!busy || summary.state === 'not_deployed'} onclick={() => stackAction('down', `${name} stopped`)} title="Stop and remove the containers (volumes are kept)">Stop</button>
-        <button class="danger" onclick={() => ((deleteOpen = true), (deleteConfirm = ''), (deleteVolumes = false))}>Delete</button>
+        {#if !deployed}
+          <button class="primary" disabled={!!busy} onclick={() => stackAction('deploy', `${name} deployed`)} title="Create and start the containers described in compose.yaml"><Rocket size={16} aria-hidden="true" />{busy === 'deploy' ? 'Deploying…' : 'Deploy'}</button>
+        {:else}
+          <button class:primary={summary.pending_changes} disabled={!!busy} onclick={() => stackAction('deploy', `${name}: changes applied`)}
+            title={summary.pending_changes ? 'Apply the saved compose.yaml: only the services whose definition changed are recreated' : 'Nothing new to apply: compose.yaml has not changed since the last deployment. Applying again recreates nothing that is up to date.'}
+            ><CheckCheck size={16} aria-hidden="true" />{busy === 'deploy' ? 'Applying…' : 'Apply changes'}</button>
+          {#if anyStopped}
+            <button disabled={!!busy} onclick={() => stackAction('start', `${name} started`)} title="Start the containers that are stopped"><Play size={16} aria-hidden="true" />Start</button>
+          {/if}
+          <button disabled={!!busy || !anyRunning} onclick={() => stackAction('restart', `${name} restarted`)} title="Restart every container, without applying any change"><RotateCw size={16} aria-hidden="true" />Restart</button>
+          <button disabled={!!busy} onclick={() => stackAction('pull', `${name} updated`)} title="Download newer versions of the images, then recreate every service (volumes keep their data)"><Download size={16} aria-hidden="true" />{busy === 'pull' ? 'Updating…' : 'Update images'}</button>
+          <button disabled={!!busy} onclick={() => stackAction('down', `${name} stopped`)} title="Stop and remove the containers. Volumes, files and settings are kept: Deploy starts the stack again"><Square size={16} aria-hidden="true" />Stop</button>
+        {/if}
+        <button class="ghost" disabled={!!busy} onclick={() => ((renameOpen = true), (newName = name), (renameError = ''))} title="Give the stack another name (a running stack is restarted under its new name; its data is kept)"><Pencil size={16} aria-hidden="true" />Rename</button>
+        <button class="danger" onclick={() => ((deleteOpen = true), (deleteConfirm = ''), (deleteVolumes = false))} title="Remove the containers and files of the stack (volumes only if you choose so)"><Trash2 size={16} aria-hidden="true" />Delete</button>
       </div>
     </div>
 
@@ -338,9 +388,9 @@
             {/if}
           {/if}
           <div class="row end mt">
-            <button onclick={runCheck}>Check policy</button>
-            <button onclick={() => saveCompose(false)} disabled={!!busy}>Save</button>
-            <button class="primary" onclick={() => saveCompose(true)} disabled={!!busy}>{busy === 'compose' ? 'Deploying…' : 'Save & deploy'}</button>
+            <button onclick={runCheck} title="Check the file against the security policy without saving it">Check policy</button>
+            <button onclick={() => saveCompose(false)} disabled={!!busy} title="Save the file; running containers are not changed until you apply">Save</button>
+            <button class="primary" onclick={() => saveCompose(true)} disabled={!!busy} title="Save the file and apply it: services whose definition changed are recreated">{busy === 'compose' ? 'Applying…' : deployed ? 'Save & apply' : 'Save & deploy'}</button>
           </div>
         {:else if svc && form}
           <div class="spread">
@@ -353,13 +403,13 @@
             </div>
             <div class="row">
               {#if running(svc)}
-                <button class="small" disabled={!!busy} onclick={() => serviceAction('stop', `${selected} stopped`)}>Stop</button>
+                <button class="small" disabled={!!busy} onclick={() => serviceAction('stop', `${selected} stopped`)} title="Stop this service's container (it stays in place; Start runs it again)"><Square size={14} aria-hidden="true" />Stop</button>
               {:else}
-                <button class="small" disabled={!!busy || !svc.containers.length} onclick={() => serviceAction('start', `${selected} started`)}>Start</button>
+                <button class="small" disabled={!!busy || !svc.containers.length} onclick={() => serviceAction('start', `${selected} started`)} title={svc.containers.length ? "Start this service's container" : 'No container yet: deploy the stack first'}><Play size={14} aria-hidden="true" />Start</button>
               {/if}
-              <button class="small" disabled={!!busy || !svc.containers.length} onclick={() => serviceAction('restart', `${selected} restarted`)}>Restart</button>
-              <button class="small" disabled={!!busy} onclick={() => serviceAction('recreate', `${selected} recreated`)} title="Recreate the container from the saved definition">{busy === 'recreate' ? 'Recreating…' : 'Recreate'}</button>
-              <button class="small" disabled={!!busy} onclick={() => serviceAction('update', `${selected} updated`)} title="Pull a newer image and recreate">{busy === 'update' ? 'Updating…' : 'Update image'}</button>
+              <button class="small" disabled={!!busy || !running(svc)} onclick={() => serviceAction('restart', `${selected} restarted`)} title="Restart the container, without applying any change"><RotateCw size={14} aria-hidden="true" />Restart</button>
+              <button class="small" disabled={!!busy} onclick={() => serviceAction('recreate', `${selected} recreated`)} title="Replace the container with a new one built from the saved definition (applies saved changes; volumes keep their data)"><RefreshCcw size={14} aria-hidden="true" />{busy === 'recreate' ? 'Recreating…' : 'Recreate'}</button>
+              <button class="small" disabled={!!busy} onclick={() => serviceAction('update', `${selected} updated`)} title="Download a newer version of the image, then recreate the container"><Download size={14} aria-hidden="true" />{busy === 'update' ? 'Updating…' : 'Update image'}</button>
             </div>
           </div>
 
@@ -409,7 +459,7 @@
                   {#each svc.containers as c (c.id)}<option value={c.name}>{c.name}</option>{/each}
                 </select>
               {/if}
-              <button class="small" onclick={loadLogs}>Refresh</button>
+              <button class="small" onclick={loadLogs} title="Load the latest lines">Refresh</button>
               <label class="check small"><input type="checkbox" bind:checked={follow} /> Follow</label>
             </div>
             <pre class="logs mt">{logs || 'Loading…'}</pre>
@@ -468,8 +518,8 @@
             {/if}
             <p class="muted small">The image is downloaded once by the server and served by Marineris: browsers never load it from elsewhere.</p>
             <div class="row end">
-              {#if svc.icon_source === 'custom'}<button onclick={() => run('icon', () => del(`${base}/icons/${encodeURIComponent(selected)}`), 'Icon removed')}>Remove icon</button>{/if}
-              <button class="primary" onclick={saveIcon} disabled={!!busy}>Set icon</button>
+              {#if svc.icon_source === 'custom'}<button onclick={() => run('icon', () => del(`${base}/icons/${encodeURIComponent(selected)}`), 'Icon removed')} title="Go back to the route's icon or to initials">Remove icon</button>{/if}
+              <button class="primary" onclick={saveIcon} disabled={!!busy} title="Download or upload the chosen icon for this service">Set icon</button>
             </div>
           {:else if tab === 'terminal'}
             <div class="alert">
@@ -482,9 +532,9 @@
           {#if ['overview', 'env', 'mounts', 'network', 'labels'].includes(tab)}
             <div class="row end mt">
               {#if dirty}<span class="muted small">Unsaved changes</span>{/if}
-              <button onclick={resetForm} disabled={!dirty || !!busy}>Reset</button>
-              <button onclick={() => saveService(false)} disabled={!dirty || !!busy}>Save</button>
-              <button class="primary" onclick={() => saveService(true)} disabled={!dirty || !!busy}>{busy === 'save' ? 'Applying…' : 'Save & recreate'}</button>
+              <button onclick={resetForm} disabled={!dirty || !!busy} title="Discard the changes made in this form">Reset</button>
+              <button onclick={() => saveService(false)} disabled={!dirty || !!busy} title="Save into compose.yaml; the container keeps running as it is until you recreate it">Save</button>
+              <button class="primary" onclick={() => saveService(true)} disabled={!dirty || !!busy} title="Save into compose.yaml and recreate this service's container with the change">{busy === 'save' ? 'Applying…' : 'Save & recreate'}</button>
             </div>
           {/if}
         {/if}
@@ -505,5 +555,26 @@
   {#snippet actions()}
     <button onclick={() => (deleteOpen = false)}>Cancel</button>
     <button class="danger" disabled={deleteConfirm !== name} onclick={doDelete}>Delete</button>
+  {/snippet}
+</Modal>
+
+<Modal bind:open={renameOpen} title="Rename stack">
+  <form id="rename-form" class="stack" onsubmit={doRename}>
+    {#if renameError}<div class="alert error">{renameError}</div>{/if}
+    <div class="field">
+      <label for="rn">New name</label>
+      <input id="rn" bind:value={newName} autocomplete="off" pattern="[a-z0-9][a-z0-9_\-]*" />
+      <div class="help">Lowercase letters, digits, "-" and "_".</div>
+    </div>
+    {#if deployed}
+      <p class="muted small">
+        The stack is running: it is stopped and started again under its new name (a short interruption). Its volumes keep their data, and routes
+        to its containers follow the new container names.
+      </p>
+    {/if}
+  </form>
+  {#snippet actions()}
+    <button onclick={() => (renameOpen = false)}>Cancel</button>
+    <button class="primary" type="submit" form="rename-form" disabled={!!busy || !newName.trim() || newName.trim() === name}>{busy === 'rename' ? 'Renaming…' : 'Rename'}</button>
   {/snippet}
 </Modal>

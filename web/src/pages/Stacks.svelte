@@ -85,7 +85,7 @@
   async function action(s, what) {
     try {
       await post(`/api/stacks/${encodeURIComponent(s.name)}/${what}`);
-      toast(`${s.name}: ${what === 'down' ? 'stopped' : 'deployed'}`);
+      toast(`${s.name}: ${what === 'down' ? 'stopped' : s.containers ? 'changes applied' : 'deployed'}`);
       await load();
     } catch (err) {
       toast(describe(err), 'error');
@@ -114,7 +114,7 @@
 <div class="stack">
   <div class="spread">
     <p class="muted small">Docker Compose stacks managed by Marineris. Every stack is checked against the security policy before it is deployed.</p>
-    <button class="primary" onclick={newStack}>New stack</button>
+    <button class="primary" onclick={newStack} title="Import or write a docker-compose file">New stack</button>
   </div>
   {#if error}<div class="alert error">{error}</div>{/if}
   <div class="card table-wrap">
@@ -135,10 +135,14 @@
             <td class="small muted">{s.deployed_at ? new Date(s.deployed_at).toLocaleString() : 'never'}</td>
             <td>
               <div class="row end">
-                <button class="small" onclick={() => open(s)}>Open</button>
-                <button class="small" onclick={() => action(s, 'deploy')}>Deploy</button>
-                <button class="small" onclick={() => action(s, 'down')}>Stop</button>
-                <button class="small danger" onclick={() => askDelete(s)}>Delete</button>
+                <button class="small" onclick={() => open(s)} title="Services, logs, settings and compose.yaml of this stack">Open</button>
+                {#if s.state === 'not_deployed' || !s.containers}
+                  <button class="small" onclick={() => action(s, 'deploy')} title="Create and start the containers described in compose.yaml">Deploy</button>
+                {:else}
+                  {#if s.pending_changes}<button class="small" onclick={() => action(s, 'deploy')} title="compose.yaml changed since the last deployment: recreate the services whose definition changed">Apply changes</button>{/if}
+                  <button class="small" onclick={() => action(s, 'down')} title="Stop and remove the containers. Volumes, files and settings are kept">Stop</button>
+                {/if}
+                <button class="small danger" onclick={() => askDelete(s)} title="Remove the containers and files of the stack (volumes only if you choose so)">Delete</button>
               </div>
             </td>
           </tr>

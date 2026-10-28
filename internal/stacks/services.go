@@ -492,3 +492,47 @@ func mapDelete(m *yaml.Node, key string) {
 		}
 	}
 }
+
+// PinVolumeNames gives every volume the stack owns an explicit name equal to
+// the one Docker already uses (<project>_<key>), so the stack keeps its data
+// when its project name changes (rename). External volumes and volumes that
+// already have a name are left alone.
+func PinVolumeNames(composeYAML []byte, project string) ([]byte, error) {
+	doc, _, err := parse(composeYAML)
+	if err != nil {
+		return nil, err
+	}
+	vols := mapGet(doc.Content[0], "volumes")
+	if vols == nil || vols.Kind != yaml.MappingNode || len(vols.Content) == 0 {
+		return composeYAML, nil
+	}
+	changed := false
+	for i := 0; i+1 < len(vols.Content); i += 2 {
+		key, decl := vols.Content[i].Value, vols.Content[i+1]
+		if decl.Kind != yaml.MappingNode {
+			*decl = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		}
+		if mapGet(decl, "name") != nil {
+			continue
+		}
+		if ext := mapGet(decl, "external"); ext != nil && ext.Value != "false" {
+			continue
+		}
+		decl.Style = 0 // block style, for readability
+		mapSet(decl, "name", &yaml.Node{Kind: yaml.ScalarNode, Value: project + "_" + key})
+		changed = true
+	}
+	if !changed {
+		return composeYAML, nil
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(doc); err != nil {
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
