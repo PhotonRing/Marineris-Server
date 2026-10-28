@@ -256,6 +256,14 @@ func (s *Server) wrap(listener string, rt Route) http.Handler {
 			}
 		case Authed, StepUp:
 			se, u, err := s.Sessions.Load(ctx, r)
+			if listener == Edge && settings.UIProtectWithAuthelia {
+				se, u, err = s.autheliaSession(w, r, rc, se, u, err)
+			}
+			var apiErr *Error
+			if errors.As(err, &apiErr) {
+				writeError(w, apiErr)
+				return
+			}
 			if errors.Is(err, auth.ErrNoSession) {
 				auth.ClearCookie(w)
 				writeError(w, &Error{Status: http.StatusUnauthorized, Code: "unauthenticated", Message: "please log in"})

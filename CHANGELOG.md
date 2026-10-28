@@ -18,6 +18,35 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-28
+
+Single sign-on: sign in once, on the Authelia portal or on any protected
+route, and the portal, every route and the Marineris UI are open, with your
+authenticator code or with a passkey alone.
+
+**Upgrading from 0.1.5:** in `.env`, set `MARINERIS_IMAGE` and
+`MARINERIS_CADDY_IMAGE` to the `0.1.6` tags, then
+`docker compose pull && docker compose up -d`. Passkeys added in **Account**
+on the public UI before now only confirm sensitive actions there: to sign in
+with a passkey, add it in the Authelia portal (**Account → Passkeys** links
+to it).
+
+### Changed
+
+- **The UI trusts the Authelia sign-in.** When Authelia protects the public
+  UI (the default), Marineris opens a session for the user Authelia vouches
+  for, so there is no second login page. Signing out of the UI signs out of
+  Authelia too. Sensitive actions still ask for a confirmation (password and
+  code, or a passkey of the UI). The break-glass listener keeps its own
+  login.
+- **Passkeys work everywhere.** A passkey added in the Authelia portal signs
+  in alone (it is unlocked on the device, which makes it two factors) to the
+  portal, every protected route and the UI. Adding it asks for no one-time
+  code: the second factor of your sign-in is enough.
+- Caddy deletes the `Remote-*` identity headers sent by clients on the UI
+  route even when Authelia does not protect it.
+- README: the Phase 2 roadmap shows Authelia's messages per user.
+
 ## [0.1.5] - 2026-10-28
 
 One account, one authenticator: the Authelia portal accepts the same
@@ -266,7 +295,8 @@ First public version: Phase 1.
   the real stack with a test ACME CA, gitleaks, govulncheck, Trivy, CodeQL,
   OWASP ZAP; multi-arch signed images with SBOM and provenance.
 
-[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.2...v0.1.3

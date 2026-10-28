@@ -51,6 +51,14 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request, rc *reqCtx) 
 		"listener":       rc.listener,
 		"setup_complete": rc.settings.SetupComplete,
 		"ui_host":        rc.settings.UIHost,
+		// On the public UI behind Authelia, the Authelia sign-in is the
+		// sign-in: the UI signs out there, and passkeys are added there.
+		"portal_url": func() string {
+			if rc.listener != Edge {
+				return ""
+			}
+			return s.portalURL(r.Context(), rc.settings)
+		}(),
 	})
 }
 

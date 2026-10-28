@@ -67,6 +67,13 @@ export async function logout() {
     app.home = '';
     setCsrf('');
   }
+  // Behind Authelia, its sign-in opens the UI: sign out there too, or the
+  // next page would sign in again.
+  const portal = app.meta?.portal_url;
+  if (portal) {
+    const back = `https://${app.meta.ui_host}/`;
+    window.location.assign(`${portal}/logout?rd=${encodeURIComponent(back)}`);
+  }
 }
 
 // Passwordless login (or step-up when already logged in).

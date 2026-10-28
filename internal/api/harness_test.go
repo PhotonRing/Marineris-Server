@@ -270,7 +270,20 @@ func (e *env) completeSetup() (*client, string) {
 	if r.Status != 200 {
 		e.t.Fatalf("setup finish: %d %s", r.Status, r.Raw)
 	}
+	// The edge clients here talk to Marineris directly, not through Caddy and
+	// Authelia: test Marineris's own sign-in (sso_test.go tests Authelia's).
+	e.setAutheliaProtection(false)
 	return c, secret
+}
+
+func (e *env) setAutheliaProtection(on bool) {
+	e.t.Helper()
+	if _, err := e.store.UpdateSettings(context.Background(), func(s *store.Settings) error {
+		s.UIProtectWithAuthelia = on
+		return nil
+	}); err != nil {
+		e.t.Fatal(err)
+	}
 }
 
 // login performs password + TOTP login. It waits for the next TOTP step when

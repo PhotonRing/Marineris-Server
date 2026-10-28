@@ -307,8 +307,12 @@ func servers(in Input) obj {
 				}},
 			})
 		}
+		// Marineris trusts these headers as the Authelia sign-in: they only
+		// ever come from Authelia's answer (forwardAuth deletes the client's).
 		if in.Settings.UIProtectWithAuthelia {
 			chain = append(chain, forwardAuth(in.Env.AutheliaUpstream))
+		} else {
+			chain = append(chain, obj{"handler": "headers", "request": obj{"delete": forwardAuthHeaders}})
 		}
 		chain = append(chain, obj{"handler": "reverse_proxy", "upstreams": []obj{{"dial": in.Env.MarinerisUpstream}}})
 		routes = append(routes, hostRoute([]string{h}, "", chain))
