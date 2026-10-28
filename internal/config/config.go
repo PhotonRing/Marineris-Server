@@ -119,5 +119,6 @@ func (c *Config) BouncerKeyPath() string {
 }
 func (c *Config) AutheliaDir() string     { return filepath.Join(c.DataDir, "authelia") }
 func (c *Config) AutheliaSecrets() string { return filepath.Join(c.SecretsDir(), "authelia") }
+func (c *Config) AutheliaDataDir() string { return filepath.Join(c.DataDir, "authelia-data") }
 func (c *Config) StacksDir() string       { return filepath.Join(c.DataDir, "stacks") }
 func (c *Config) StaticRoot() string      { return filepath.Join(c.DataDir, "static") }

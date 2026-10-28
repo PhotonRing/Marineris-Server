@@ -561,6 +561,8 @@ func (s *Server) handleTOTPFinish(w http.ResponseWriter, r *http.Request, rc *re
 	delete(s.totpEnrol, rc.user.ID)
 	s.totpMu.Unlock()
 	s.audit(r, rc, "totp.enrol", rc.actor(), true, "")
+	// The same authenticator signs in to the Authelia portal.
+	s.applyAsync(rc.actor(), "authenticator changed", true, false)
 	return ok(w, map[string]bool{"ok": true})
 }
 

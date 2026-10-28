@@ -17,7 +17,7 @@ services:
     image: ${MARINERIS_CADDY_IMAGE}
     container_name: demo-hello
     entrypoint: ["caddy"]
-    command: ["respond", "--listen", ":8000", "Hello from the Marineris demo! Signed in as: {http.request.header.Remote-User}"]
+    command: ["respond", "--listen", ":80", "Hello from the Marineris demo! Signed in as: {http.request.header.Remote-User}"]
     user: "65532:65532"
     read_only: true
     cap_drop: [ALL]

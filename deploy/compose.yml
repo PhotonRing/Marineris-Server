@@ -45,8 +45,9 @@ services:
       - -watchdoginterval=600
       - -stoponwatchdog
       # Bind mounts in containers created through the proxy must come from here.
-      # (the Authelia folders are needed by the config validator).
-      - -allowbindmountfrom=${MARINERIS_DATA}/stacks,${MARINERIS_DATA}/authelia,${MARINERIS_DATA}/secrets/authelia,${MARINERIS_ALLOWED_BIND_ROOTS:-/srv,/mnt,/media}
+      # (the Authelia folders are needed by the config validator, and its
+      # database by the helper that registers users' authenticators).
+      - -allowbindmountfrom=${MARINERIS_DATA}/stacks,${MARINERIS_DATA}/authelia,${MARINERIS_DATA}/authelia-data,${MARINERIS_DATA}/secrets/authelia,${MARINERIS_ALLOWED_BIND_ROOTS:-/srv,/mnt,/media}
       # Allow-list of Docker API endpoints. Notably absent: exec, build,
       # commit, archive/export, attach, swarm, plugins, secrets, configs.
       - '-allowHEAD=(/v1\.[0-9]+)?/_ping'

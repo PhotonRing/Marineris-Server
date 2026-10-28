@@ -205,6 +205,10 @@ CREATE TABLE images (
 	`
 ALTER TABLE routes ADD COLUMN hub_icon_link TEXT NOT NULL DEFAULT '';
 `,
+	// 5: a user's authenticator is registered in Authelia too
+	`
+ALTER TABLE users ADD COLUMN authelia_totp TEXT NOT NULL DEFAULT '';
+`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

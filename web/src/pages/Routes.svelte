@@ -290,12 +290,14 @@
         </div>
         <div class="field">
           <label for="rp">Port</label>
-          {#if selected && selected.ports.length > 1}
-            <select id="rp" bind:value={form.port}>
-              {#each selected.ports as p}<option value={p}>{p}</option>{/each}
-            </select>
-          {:else}
-            <input id="rp" type="number" min="1" max="65535" bind:value={form.port} required />
+          <!-- The ports an image declares are suggestions: an app can listen on
+               any port (e.g. one set by its command). -->
+          <input id="rp" type="number" min="1" max="65535" list="rp-ports" bind:value={form.port} required />
+          {#if selected && selected.ports.length}
+            <datalist id="rp-ports">
+              {#each selected.ports as p}<option value={p}></option>{/each}
+            </datalist>
+            <p class="small muted">Declared by the image: {selected.ports.join(', ')}</p>
           {/if}
         </div>
       </div>

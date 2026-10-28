@@ -371,7 +371,15 @@ func (m *Manager) ApplyAuthelia(ctx context.Context, actor, reason string) error
 	if err != nil {
 		return &ApplyError{Component: Authelia, Stage: "validate", Err: err}
 	}
-	return m.applyAutheliaLocked(ctx, actor, reason, cfg, users)
+	if err := m.applyAutheliaLocked(ctx, actor, reason, cfg, users); err != nil {
+		return err
+	}
+	// Authelia knows the users now: give them their authenticators. A failure
+	// does not undo the configuration; housekeeping retries.
+	if err := m.syncAutheliaTOTPLocked(ctx); err != nil {
+		m.log.Warn("authenticators not registered in Authelia yet", "err", err)
+	}
+	return nil
 }
 
 func (m *Manager) applyAutheliaLocked(ctx context.Context, actor, reason string, cfg, users []byte) error {

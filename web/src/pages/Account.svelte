@@ -167,10 +167,11 @@
   </div>
 
   <div class="card">
-    <h2>Authelia enrolment codes</h2>
+    <h2>Authelia messages</h2>
     <p class="small muted">
-      The first time you sign in to the Authelia portal, it asks you to register a 2FA device and sends a one-time code.
-      Marineris shows that message here.
+      Your password and authenticator app also sign you in to the Authelia portal: Marineris registers them there.
+      For some actions in the portal, such as adding a passkey, Authelia asks for a one-time code that it would
+      e-mail; Marineris shows that message here.
     </p>
     <button onclick={loadNotification}>Show latest message</button>
     {#if notification}

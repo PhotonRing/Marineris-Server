@@ -27,7 +27,7 @@ sudo ./install.sh
 of the Docker socket. Edit `.env`:
 
 - `MARINERIS_IMAGE` / `MARINERIS_CADDY_IMAGE`: pin a release, e.g.
-  `ghcr.io/photonring/marineris:0.1.4` (and verify it, see the release notes).
+  `ghcr.io/photonring/marineris:0.1.5` (and verify it, see the release notes).
 - `MARINERIS_ALLOWED_BIND_ROOTS`: host folders your stacks may mount
   (default `/srv,/mnt,/media`).
 
@@ -68,9 +68,11 @@ host → **store the recovery codes**.
 3. **Settings** → *Public hostname* of the UI, e.g. `marineris.example.com`
    (must be inside one of your domains). The UI is then protected by Authelia
    **and** by the Marineris login.
-4. Sign in once at `https://auth.<your-domain>` to enrol Authelia's second
-   factor: the one-time code it sends is shown in **Account → Authelia
-   enrolment codes**.
+4. Sign in once at `https://auth.<your-domain>` to check it: the same
+   password and authenticator app as Marineris (Marineris registers them in
+   Authelia). One-time codes that Authelia would e-mail, for actions such as
+   adding a passkey in its portal, are shown in **Account → Authelia
+   messages**.
 5. **Routes** → publish applications.
 6. When certificates show as *staging* everywhere and everything works,
    **Settings → untick "staging"**. Production certificates replace them.
