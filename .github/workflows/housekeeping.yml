@@ -7,6 +7,10 @@ name: Housekeeping
 #   page, and branches whose work is already in main are deleted;
 # - a manual run does the same, with a chosen age (0 deletes every finished
 #   run).
+
+# Runners: the project's self-hosted runner, except for pull requests from
+# forks (GitHub's runners). See docs/runbooks/ci-runner.md.
+
 on:
   pull_request:
     types: [closed]
@@ -29,7 +33,7 @@ jobs:
       github.event_name == 'pull_request' && github.event.pull_request.merged &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       !startsWith(github.event.pull_request.head.ref, 'dependabot/')
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 5
     permissions:
       contents: write
@@ -42,7 +46,7 @@ jobs:
   tidy:
     name: Delete old runs and merged branches
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
     timeout-minutes: 30
     permissions:
       actions: write # delete runs

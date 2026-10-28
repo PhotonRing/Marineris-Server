@@ -4,11 +4,13 @@ import { PASSWORD, setupToken, totp, watchConsole } from './helpers.js';
 test.describe.configure({ mode: 'serial' });
 
 let secret = '';
+// The public listener (serve.sh).
+const edge = `http://127.0.0.1:${process.env.E2E_EDGE_PORT || 18180}`;
 
 test('public listener refuses everything before setup', async ({ page }) => {
-  await page.goto('http://127.0.0.1:18180/');
+  await page.goto(`${edge}/`);
   await expect(page.getByRole('heading', { name: 'Setup pending' })).toBeVisible();
-  const res = await page.request.get('http://127.0.0.1:18180/api/overview');
+  const res = await page.request.get(`${edge}/api/overview`);
   expect(res.status()).toBe(503);
 });
 

@@ -18,6 +18,13 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+### Changed
+
+- **CI runs on the project's self-hosted runner**, except pull requests from
+  forks and the integration test, which stay on GitHub's runners (see
+  [the runner runbook](docs/runbooks/ci-runner.md)). The jobs no longer need
+  sudo, and the security scan's test instance only listens on loopback.
+
 ## [0.1.7] - 2026-10-28
 
 The sign-in page carries your branding, and passkey fixes.

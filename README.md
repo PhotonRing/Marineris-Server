@@ -139,7 +139,8 @@ Full guide: [docs/install.md](docs/install.md).
   [certificate problems](docs/runbooks/certificates.md) ·
   [OVH token](docs/runbooks/ovh-token.md) ·
   [backup and restore](docs/runbooks/backup-restore.md) ·
-  [upgrade](docs/runbooks/upgrade.md)
+  [upgrade](docs/runbooks/upgrade.md) ·
+  [self-hosted CI runner](docs/runbooks/ci-runner.md)
 - [Branding](branding/README.md) · [Name and logo policy](TRADEMARKS.md) ·
   [Security policy](SECURITY.md) ·
   [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
