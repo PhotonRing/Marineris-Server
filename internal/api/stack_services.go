@@ -615,7 +615,9 @@ func (s *Server) handleStackRename(w http.ResponseWriter, r *http.Request, rc *r
 	for _, c := range own {
 		if to, ok := renamed[c.Name]; ok && c.Routable && s.Docker != nil {
 			if err := s.Docker.ConnectToApps(ctx, to); err != nil {
-				s.Log.Warn("reattaching a renamed container to the apps network failed", "container", to, "err", err)
+				// Logged by its previous name (from Docker); the new one is
+				// derived from the request.
+				s.Log.Warn("reattaching a renamed container to the apps network failed", "previous_name", c.Name, "err", err)
 			}
 		}
 	}
