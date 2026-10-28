@@ -22,6 +22,26 @@ export function toast(message, kind = 'ok') {
 
 export async function loadMeta() {
   app.meta = await get('/api/meta');
+  applyBrand(app.meta.brand);
+}
+
+// Branding chosen in Settings: page title, favicon, accent colour and hub
+// background. The logo and name are read from app.meta.brand by the views.
+export function applyBrand(brand) {
+  if (!brand) return;
+  app.meta = { ...app.meta, brand };
+  document.title = brand.name;
+  for (const [sel, def] of [['link[rel="icon"]', '/branding/favicon-32.png'], ['link[rel="apple-touch-icon"]', '/branding/icon-192.png']]) {
+    const el = document.querySelector(sel);
+    if (el) {
+      el.href = (sel.includes('apple') ? brand.logo : brand.favicon) || def;
+      el.removeAttribute('type');
+    }
+  }
+  const root = document.documentElement.style;
+  if (brand.background) root.setProperty('--hub-bg-image', `url("${brand.background}")`);
+  else root.removeProperty('--hub-bg-image');
+  applyTheme(document.documentElement.dataset.theme || 'dark', { remember: false });
 }
 
 export async function loadSession() {
@@ -88,13 +108,20 @@ export async function loadTheme() {
   }
 }
 
-export function applyTheme(mode) {
+export function applyTheme(mode, { remember = true } = {}) {
   const root = document.documentElement;
   root.dataset.theme = mode;
-  const vars = app.theme?.[mode];
-  if (vars) {
-    for (const [k, v] of Object.entries(vars)) root.style.setProperty('--' + k, v);
+  const vars = { ...app.theme?.[mode] };
+  // A custom accent replaces the theme's; the secondary accent (links) is a
+  // lighter or darker shade of it so it stays readable on the background.
+  const accent = app.meta?.brand?.accent;
+  if (accent) {
+    vars.accent = accent;
+    vars['accent-2'] = `color-mix(in srgb, ${accent} ${mode === 'light' ? '80%, black' : '70%, white'})`;
   }
+  for (const k of ['accent', 'accent-2']) if (!vars[k]) root.style.removeProperty('--' + k);
+  for (const [k, v] of Object.entries(vars)) root.style.setProperty('--' + k, v);
+  if (!remember) return;
   try {
     localStorage.setItem('marineris-theme', mode);
   } catch {

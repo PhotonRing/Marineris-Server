@@ -1,4 +1,5 @@
 <script>
+  import BrandLogo from '../components/BrandLogo.svelte';
   import { post, describe } from '../lib/api.js';
   import { app, setSession, loadMeta } from '../lib/state.svelte.js';
 
@@ -63,7 +64,7 @@
 
 <div class="center auth-bg">
   <div class="card auth-card stack">
-    <div class="auth-logo"><img src="/branding/logo-full.svg" alt="Marineris" /></div>
+    <BrandLogo />
     <h2>First-run setup · step {step} of 3</h2>
     {#if error}<div class="alert error" role="alert">{error}</div>{/if}
 

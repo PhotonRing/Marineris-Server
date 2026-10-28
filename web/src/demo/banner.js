@@ -13,3 +13,5 @@ css.replaceSync(`
   .demo-banner a { color: #fff; font-weight: 600; margin-left: 0.5rem; }
 `);
 document.adoptedStyleSheets = [...document.adoptedStyleSheets, css];
+// The app's full-height layout leaves room for the banner (no page scroll).
+new ResizeObserver(() => document.documentElement.style.setProperty('--chrome-top', `${bar.offsetHeight}px`)).observe(bar);

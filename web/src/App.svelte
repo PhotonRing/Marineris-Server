@@ -4,6 +4,7 @@
   import { onStepUp, onUnauthenticated } from './lib/api.js';
   import { path, link, navigate } from './lib/router.js';
   import StepUp from './components/StepUp.svelte';
+  import BrandLogo from './components/BrandLogo.svelte';
   import Setup from './pages/Setup.svelte';
   import Login from './pages/Login.svelte';
   import Dashboard from './pages/Dashboard.svelte';
@@ -83,7 +84,7 @@
   {:else}
     <div class="center auth-bg">
       <div class="card auth-card stack">
-        <div class="auth-logo"><img src="/branding/logo-full.svg" alt="Marineris" /></div>
+        <BrandLogo />
         <h2>Setup pending</h2>
         <p>
           This server has not been set up yet. For security, the first-run setup is only available on the local listener.
@@ -99,7 +100,10 @@
 {:else}
   <div class="shell">
     <aside class="sidebar">
-      <div class="brand"><img src="/branding/icon-192.png" alt="" /><span class="wordmark" role="img" aria-label="Marineris"></span></div>
+      <div class="brand">
+        <img src={app.meta.brand?.logo || '/branding/icon-192.png'} alt="" />
+        {#if app.meta.brand?.custom_name}<span class="brand-name">{app.meta.brand.name}</span>{:else}<span class="wordmark" role="img" aria-label="Marineris"></span>{/if}
+      </div>
       <nav class="nav">
         {#each pages as p (p.path || p.section)}
           {#if p.section}

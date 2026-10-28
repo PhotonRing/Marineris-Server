@@ -1,4 +1,5 @@
 DELETE /api/account/passkeys/{id}                 stepup  both
+DELETE /api/branding/{asset}                      stepup  both
 DELETE /api/containers/{id}                       stepup  both
 DELETE /api/dns/profiles/{id}                     stepup  both
 DELETE /api/domains/{id}                          stepup  both
@@ -10,6 +11,7 @@ GET    /api/account/passkeys                      authed  both
 GET    /api/audit                                 authed  both
 GET    /api/auth/session                          authed  both
 GET    /api/authelia/notification                 authed  both
+GET    /api/branding/{asset}                      public  both
 GET    /api/certificates                          authed  both
 GET    /api/config/components/{component}/current authed  both
 GET    /api/config/components/{component}/history authed  both
@@ -60,6 +62,8 @@ POST   /api/stacks                                authed  both
 POST   /api/stacks/check                          authed  both
 POST   /api/stacks/{name}/deploy                  authed  both
 POST   /api/stacks/{name}/down                    authed  both
+PUT    /api/branding                              stepup  both
+PUT    /api/branding/{asset}                      stepup  both
 PUT    /api/dns/profiles/{id}                     stepup  both
 PUT    /api/domains/{id}                          authed  both
 PUT    /api/routes/{id}                           authed  both

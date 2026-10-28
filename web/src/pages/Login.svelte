@@ -1,4 +1,5 @@
 <script>
+  import BrandLogo from '../components/BrandLogo.svelte';
   import { post, describe } from '../lib/api.js';
   import { setSession, passkeyLogin } from '../lib/state.svelte.js';
   import { passkeysSupported } from '../lib/webauthn.js';
@@ -59,7 +60,7 @@
 
 <div class="center auth-bg">
   <div class="card auth-card stack">
-    <div class="auth-logo"><img src="/branding/logo-full.svg" alt="Marineris" /></div>
+    <BrandLogo />
     {#if error}<div class="alert error" role="alert">{error}</div>{/if}
 
     {#if !mfaToken}

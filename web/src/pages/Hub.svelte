@@ -160,7 +160,7 @@
               <span class="tile-icon tile-initials" aria-hidden="true">{initials(t.title)}</span>
             {/if}
             <span class="tile-text">
-              <span class="tile-title">{t.title}{#if t.auth === 'authelia'}<span class="tile-lock" title="Protected by Authelia">🔒</span>{/if}</span>
+              <span class="tile-title">{t.title}{#if t.auth === 'admins'}<span class="tile-lock" title="Administrators only">🛡</span>{:else if t.auth === 'authelia'}<span class="tile-lock" title="Protected by Authelia">🔒</span>{/if}</span>
               {#if t.subtitle}<span class="tile-sub muted">{t.subtitle}</span>{/if}
             </span>
           </a>

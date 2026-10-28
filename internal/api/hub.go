@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	"net/http"
 	"sort"
 	"strconv"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/photonring/marineris-server/internal/icons"
+	"github.com/photonring/marineris-server/internal/store"
 )
 
 var validWidgets = map[string]bool{
@@ -64,12 +64,7 @@ func (s *Server) handleHubIcon(w http.ResponseWriter, r *http.Request, rc *reqCt
 	if err != nil {
 		return err
 	}
-	h := w.Header()
-	h.Set("Content-Type", ic.ContentType)
-	h.Set("Cache-Control", "private, max-age=86400")
-	// SVGs can carry scripts: never let them run, even when opened directly.
-	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
-	_, _ = w.Write(ic.Data) //nolint:gosec // sniffed image with a fixed type and a sandboxing CSP
+	serveImage(w, &store.Image{ContentType: ic.ContentType, Data: ic.Data})
 	return nil
 }
 
@@ -97,12 +92,8 @@ func (s *Server) handleRouteIconSet(w http.ResponseWriter, r *http.Request, rc *
 	var ct string
 	switch {
 	case req.Data != "":
-		data, err = base64.StdEncoding.DecodeString(req.Data)
-		if err != nil {
-			return fieldError("data", "must be base64")
-		}
-		if ct, err = icons.Detect(data); err != nil {
-			return fieldError("data", err.Error())
+		if ct, data, err = decodeImage(req.Data); err != nil {
+			return err
 		}
 	case req.URL != "" || req.Name != "":
 		u := strings.TrimSpace(req.URL)

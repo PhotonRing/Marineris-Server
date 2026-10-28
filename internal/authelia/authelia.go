@@ -9,6 +9,9 @@ package authelia
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"regexp"
+	"slices"
 	"sort"
 
 	"gopkg.in/yaml.v3"
@@ -42,9 +45,20 @@ type User struct {
 type Input struct {
 	Settings store.Settings
 	Domains  []string
-	// ProtectedHosts are hosts whose routes use the Authelia policy.
-	ProtectedHosts []string
-	Users          []User
+	// Protected are the routes behind Authelia.
+	Protected []Resource
+	Users     []User
+}
+
+// AdminsGroup is the Authelia group of Marineris administrators.
+const AdminsGroup = "admins"
+
+// Resource is a host, optionally narrowed to a path prefix ("/app"), that
+// needs a two-factor login; AdminOnly restricts it to AdminsGroup.
+type Resource struct {
+	Host       string
+	PathPrefix string
+	AdminOnly  bool
 }
 
 // Render returns configuration.yml and users_database.yml.
@@ -72,9 +86,12 @@ func Validate(in Input) error {
 			problems = append(problems, fmt.Sprintf("domain %q: %v", d, err))
 		}
 	}
-	for _, h := range in.ProtectedHosts {
-		if err := validate.Hostname(h); err != nil {
-			problems = append(problems, fmt.Sprintf("host %q: %v", h, err))
+	for _, res := range in.Protected {
+		if err := validate.Hostname(res.Host); err != nil {
+			problems = append(problems, fmt.Sprintf("host %q: %v", res.Host, err))
+		}
+		if err := validate.PathPrefix(res.PathPrefix); err != nil {
+			problems = append(problems, fmt.Sprintf("path %q: %v", res.PathPrefix, err))
 		}
 	}
 	for _, u := range in.Users {
@@ -110,13 +127,28 @@ func configDoc(in Input) m {
 		})
 	}
 
-	hosts := append([]string(nil), in.ProtectedHosts...)
-	sort.Strings(hosts)
-	hosts = dedupe(hosts)
+	// Authelia applies the first matching rule: the most specific resources
+	// come first. An admin-only resource lets members of the admins group in
+	// with two factors and denies everyone else before a broader rule for
+	// the same host can match.
 	rules := []m{}
-	if len(hosts) > 0 {
-		rules = append(rules, m{"domain": hosts, "policy": "two_factor"})
-	} else {
+	for _, res := range resources(in.Protected) {
+		rule := m{"domain": []string{res.Host}}
+		if res.PathPrefix != "" {
+			rule["resources"] = []string{"^" + regexp.QuoteMeta(res.PathPrefix) + "([/?#].*)?$"}
+		}
+		if !res.AdminOnly {
+			rule["policy"] = "two_factor"
+			rules = append(rules, rule)
+			continue
+		}
+		allow := maps.Clone(rule)
+		allow["subject"] = []string{"group:" + AdminsGroup}
+		allow["policy"] = "two_factor"
+		rule["policy"] = "deny"
+		rules = append(rules, allow, rule)
+	}
+	if len(rules) == 0 {
 		// Authelia refuses default_policy "deny" without any rule; add an
 		// inert one so the default stays deny-all.
 		rules = append(rules, m{"domain": []string{"deny." + PlaceholderDomain}, "policy": "deny"})
@@ -236,12 +268,22 @@ func usersDoc(users []User) m {
 	return m{"users": out}
 }
 
-func dedupe(sorted []string) []string {
-	out := sorted[:0]
-	for i, s := range sorted {
-		if i == 0 || s != sorted[i-1] {
-			out = append(out, s)
+// resources sorts resources by host, longest path prefix first, and merges
+// duplicates (admin-only wins).
+func resources(in []Resource) []Resource {
+	out := append([]Resource(nil), in...)
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Host != b.Host {
+			return a.Host < b.Host
 		}
-	}
-	return out
+		if len(a.PathPrefix) != len(b.PathPrefix) {
+			return len(a.PathPrefix) > len(b.PathPrefix)
+		}
+		if a.PathPrefix != b.PathPrefix {
+			return a.PathPrefix < b.PathPrefix
+		}
+		return a.AdminOnly && !b.AdminOnly
+	})
+	return slices.CompactFunc(out, func(a, b Resource) bool { return a.Host == b.Host && a.PathPrefix == b.PathPrefix })
 }

@@ -15,9 +15,11 @@ import (
 func input() Input {
 	st := store.DefaultSettings()
 	return Input{
-		Settings:       st,
-		Domains:        []string{"friend.org", "example.com"},
-		ProtectedHosts: []string{"media.example.com", "marineris.example.com", "media.example.com"},
+		Settings: st,
+		Domains:  []string{"friend.org", "example.com"},
+		Protected: []Resource{
+			{Host: "media.example.com"}, {Host: "marineris.example.com", AdminOnly: true}, {Host: "media.example.com"},
+		},
 		Users: []User{{
 			Username:     "admin",
 			Email:        "ops@example.com",
@@ -41,9 +43,13 @@ func TestRenderSecureDefaults(t *testing.T) {
 		t.Fatal("default policy must be deny")
 	}
 	rules := ac["rules"].([]any)
-	rule := rules[0].(map[string]any)
-	if rule["policy"] != "two_factor" || len(rule["domain"].([]any)) != 2 {
-		t.Fatalf("unexpected rule %v", rule)
+	if len(rules) != 3 {
+		t.Fatalf("want admins-allow, deny and two_factor rules, got %v", rules)
+	}
+	for _, r := range rules {
+		if r.(map[string]any)["policy"] == "bypass" || r.(map[string]any)["policy"] == "one_factor" {
+			t.Fatalf("weak rule %v", r)
+		}
 	}
 	if !strings.Contains(string(cfg), "enable_passkey_login: true") {
 		t.Fatal("passkey login not enabled")
@@ -63,7 +69,7 @@ func TestRenderSecureDefaults(t *testing.T) {
 
 func TestRenderPlaceholderBeforeSetup(t *testing.T) {
 	in := input()
-	in.Domains, in.ProtectedHosts, in.Users = nil, nil, nil
+	in.Domains, in.Protected, in.Users = nil, nil, nil
 	cfg, _, err := Render(in)
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +96,8 @@ func TestRenderPlaceholderBeforeSetup(t *testing.T) {
 func TestRenderRejectsInjection(t *testing.T) {
 	for _, mut := range []func(*Input){
 		func(in *Input) { in.Domains = []string{"example.com\npolicy: bypass"} },
-		func(in *Input) { in.ProtectedHosts = []string{"*.example.com"} },
+		func(in *Input) { in.Protected = []Resource{{Host: "*.example.com"}} },
+		func(in *Input) { in.Protected = []Resource{{Host: "a.example.com", PathPrefix: "/x$|.*"}} },
 		func(in *Input) { in.Users[0].PasswordHash = "" },
 		func(in *Input) { in.Settings.AuthSubdomain = "a b" },
 	} {
@@ -99,6 +106,52 @@ func TestRenderRejectsInjection(t *testing.T) {
 		if _, _, err := Render(in); err == nil {
 			t.Error("invalid input accepted")
 		}
+	}
+}
+
+// TestAdminOnlyRules checks rule order: specific paths before whole hosts,
+// and an admin-only resource denies everyone outside the admins group before
+// a broader two-factor rule of the same host can let them in.
+func TestAdminOnlyRules(t *testing.T) {
+	in := input()
+	in.Protected = []Resource{
+		{Host: "apps.example.com"},
+		{Host: "apps.example.com", PathPrefix: "/admin", AdminOnly: true},
+		{Host: "apps.example.com", PathPrefix: "/admin/public"},
+		{Host: "ops.example.com", AdminOnly: true},
+		{Host: "ops.example.com"}, // the stricter duplicate wins
+	}
+	cfg, _, err := Render(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		AccessControl struct {
+			Rules []struct {
+				Domain    []string `yaml:"domain"`
+				Resources []string `yaml:"resources"`
+				Subject   []string `yaml:"subject"`
+				Policy    string   `yaml:"policy"`
+			} `yaml:"rules"`
+		} `yaml:"access_control"`
+	}
+	if err := yaml.Unmarshal(cfg, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range doc.AccessControl.Rules {
+		got = append(got, strings.Join(r.Domain, ",")+" "+strings.Join(r.Resources, ",")+" "+strings.Join(r.Subject, ",")+" "+r.Policy)
+	}
+	want := []string{
+		`apps.example.com ^/admin/public([/?#].*)?$  two_factor`,
+		`apps.example.com ^/admin([/?#].*)?$ group:admins two_factor`,
+		`apps.example.com ^/admin([/?#].*)?$  deny`,
+		`apps.example.com   two_factor`,
+		`ops.example.com  group:admins two_factor`,
+		`ops.example.com   deny`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("rules:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 

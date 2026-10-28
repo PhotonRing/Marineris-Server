@@ -151,13 +151,58 @@ function logs(c) {
   return [`${t(3600)} ${c.name}: started`, `${t(1800)} ${c.name}: ready`, `${t(60)} ${c.name}: healthy`].join('\n');
 }
 
+function brand() {
+  const { name, accent, images } = db.brand;
+  return { name: name || 'Marineris', custom_name: !!name, accent, ...images };
+}
+
+// Sniffs an uploaded image (base64) like the server does.
+function imageType(b64) {
+  let head = '';
+  try {
+    head = atob(b64.slice(0, 64));
+  } catch {
+    return '';
+  }
+  if (head.startsWith('\x89PNG')) return 'image/png';
+  if (head.startsWith('\xff\xd8\xff')) return 'image/jpeg';
+  if (head.startsWith('GIF8')) return 'image/gif';
+  if (head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP') return 'image/webp';
+  if (head.startsWith('\0\0\x01\0')) return 'image/x-icon';
+  if (/^\s*(<\?xml|<svg|<!--)/i.test(head)) return 'image/svg+xml';
+  return '';
+}
+
 const QR = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="#fff"/><text x="80" y="84" font-family="sans-serif" font-size="13" text-anchor="middle">QR code (demo)</text></svg>');
 const code = () => Array.from({ length: 2 }, () => Math.random().toString(36).slice(2, 6)).join('-');
 
 // [method, pattern, handler(params, body, query)]
 const routes = [
   ['GET', '/api/health', () => ok({ status: 'ok' })],
-  ['GET', '/api/meta', () => ok({ ...db.meta, setup_complete: true })],
+  ['GET', '/api/meta', () => ok({ ...db.meta, setup_complete: true, brand: brand() })],
+  ['PUT', '/api/branding', (p, b) => {
+    const name = (b.name || '').trim();
+    if (name.length > 40 || /[<>\r\n\t]/.test(name)) return fail(400, 'invalid', 'name: is limited to 40 characters, without < > or line breaks', { field: 'name' });
+    const accent = (b.accent || '').trim().toLowerCase();
+    if (accent && !/^#[0-9a-f]{6}$/.test(accent)) return fail(400, 'invalid', 'accent: must be a colour like #e8743b', { field: 'accent' });
+    Object.assign(db.brand, { name: name === 'Marineris' ? '' : name, accent });
+    audit('branding.update', '', `name=${db.brand.name} accent=${accent}`);
+    return ok(brand());
+  }],
+  ['PUT', '/api/branding/{asset}', (p, b) => {
+    if (!(p.asset in db.brand.images)) return notFound();
+    const type = imageType(b.data || '');
+    if (!type) return fail(400, 'invalid', 'data: icons: not a PNG, JPEG, WebP, GIF, ICO or SVG image (max 512 KB)', { field: 'data' });
+    db.brand.images[p.asset] = `data:${type};base64,${b.data}`;
+    audit(`branding.${p.asset}`, '', type);
+    return ok(brand());
+  }],
+  ['DELETE', '/api/branding/{asset}', (p) => {
+    if (!(p.asset in db.brand.images)) return notFound();
+    db.brand.images[p.asset] = '';
+    audit(`branding.${p.asset}`, '', 'reset to default');
+    return ok(brand());
+  }],
   ['POST', '/api/auth/login', (p, b) => (b.username && b.password ? ok({ mfa_required: true, mfa_token: 'demo' }) : fail(401, 'invalid_credentials', 'wrong username or password'))],
   ['POST', '/api/auth/login/mfa', (p, b) => {
     if (!(b.code || b.recovery_code)) return fail(401, 'invalid_code', 'wrong code');
@@ -290,7 +335,7 @@ const routes = [
     if (err) return err;
     const r = { id: nextId++, name: b.name, host: b.host, path_prefix: b.path_prefix || '', kind: b.kind, target: b.target, auth: b.auth, rate_limit: b.rate_limit ?? null, enabled: b.enabled !== false, created_at: iso(), updated_at: iso(), hub: { visible: true, title: '', subtitle: '', ...(b.hub || {}), has_icon: false } };
     db.routes.push(r);
-    applied(`route ${r.name} added`, r.auth === 'authelia' ? ['caddy', 'authelia'] : ['caddy']);
+    applied(`route ${r.name} added`, r.auth !== 'none' ? ['caddy', 'authelia'] : ['caddy']);
     audit('route.create', r.name, r.host);
     return ok(r);
   }],
@@ -422,7 +467,7 @@ export async function handle(method, url, body) {
     const m = path.match(r.re);
     if (!m) continue;
     const params = Object.fromEntries(r.names.map((n, i) => [n, decodeURIComponent(m[i + 1])]));
-    const open = path === '/api/meta' || path === '/api/health' || path.startsWith('/api/auth/login') || path === '/api/auth/passkey/begin';
+    const open = path === '/api/meta' || path.startsWith('/api/branding/') && method === 'GET' || path === '/api/health' || path.startsWith('/api/auth/login') || path === '/api/auth/passkey/begin';
     if (!open && !db.session) return unauthenticated();
     return r.fn(params, body || {}, new URLSearchParams(qs));
   }

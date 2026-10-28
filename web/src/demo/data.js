@@ -50,7 +50,7 @@ export function seed() {
   const routes = [
     route(1, 'jellyfin', 'media.mars.example', 'container', { container: 'jellyfin', port: 8096 }, 'none', { visible: true, title: 'Jellyfin', subtitle: 'Films and series', has_icon: true }, 2900),
     route(2, 'status', 'status.mars.example', 'container', { container: 'uptime-kuma', port: 3001 }, 'authelia', { visible: true, title: 'Uptime Kuma', subtitle: 'Service monitoring', has_icon: true }, 2800),
-    route(3, 'nas', 'nas.mars.example', 'external', { url: 'http://192.168.1.20:5000' }, 'authelia', { visible: true, title: 'NAS', subtitle: 'Synology DSM on the LAN' }, 2000),
+    route(3, 'nas', 'nas.mars.example', 'external', { url: 'http://192.168.1.20:5000' }, 'admins', { visible: true, title: 'NAS', subtitle: 'Synology DSM on the LAN' }, 2000),
     route(4, 'docs', 'docs.valles.example', 'static', { folder: 'docs' }, 'none', { visible: true, title: 'Documentation', subtitle: 'Static site' }, 1500),
   ];
   return {
@@ -63,7 +63,7 @@ export function seed() {
     settings: {
       setup_complete: true, acme_email: 'admin@mars.example', acme_staging: false, acme_directory: '', acme_trusted_root_file: '',
       dns_resolvers: null, dns_propagation_timeout: '2m', ui_host: 'mars.example', ui_protect_with_authelia: true, auth_subdomain: 'auth',
-      home_page: 'hub', hub_title: 'Marineris', hub_widgets: ['clock', 'cpu', 'memory', 'disk', 'network', 'uptime'], hub_background: false,
+      home_page: 'hub', hub_title: 'Marineris', hub_widgets: ['clock', 'cpu', 'memory', 'disk', 'network', 'uptime'], hub_background: true,
       crowdsec_enabled: true, default_rate_limit: { events: 0, window: '' }, login_rate_limit: { events: 20, window: '1m' },
     },
     providers,
@@ -138,6 +138,7 @@ export function seed() {
       .map(([action, target, details, minutes], i, all) => ({
         id: all.length - i, at: ago(minutes), actor: 'admin', ip: '203.0.113.24', action, target, success: true, details,
       })),
+    brand: { name: '', accent: '', images: { favicon: '', logo: '', background: '' } },
     passkeys: [{ id: 'ZGVtby1sYXB0b3A', name: 'Laptop', created_at: ago(4300), last_used_at: ago(5) }],
     started: now - (3 * 86400 + 4 * 3600) * 1000,
   };

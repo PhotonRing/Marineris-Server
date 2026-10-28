@@ -228,7 +228,7 @@
             <td class="mono small"><a href={'https://' + r.host + r.path_prefix} target="_blank" rel="noopener noreferrer">{r.host}{r.path_prefix}</a></td>
             <td class="mono small">{targetText(r)}</td>
             <td>
-              {#if r.auth === 'authelia'}<span class="badge ok">Authelia 2FA</span>{:else}<span class="badge warn">public</span>{/if}
+              {#if r.auth === 'admins'}<span class="badge ok">admins only</span>{:else if r.auth === 'authelia'}<span class="badge ok">Authelia 2FA</span>{:else}<span class="badge warn">public</span>{/if}
               {#if r.rate_limit}<span class="badge">{r.rate_limit.events}/{r.rate_limit.window}</span>{/if}
             </td>
             <td><div class="row end"><button class="small" onclick={() => edit(r)}>Edit</button><button class="small danger" onclick={() => remove(r)}>Delete</button></div></td>
@@ -324,6 +324,7 @@
         <label for="ra">Access</label>
         <select id="ra" bind:value={form.auth}>
           <option value="authelia">Require Authelia login (2FA)</option>
+          <option value="admins">Administrators only (Authelia 2FA)</option>
           <option value="none">Public (the app handles its own login)</option>
         </select>
       </div>

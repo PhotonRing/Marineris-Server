@@ -40,6 +40,7 @@ func (s *Server) table() []Route {
 		// Public
 		{G, "/api/health", Public, false, s.handleHealth},
 		{G, "/api/meta", Public, false, s.handleMeta},
+		{G, "/api/branding/{asset}", Public, false, s.handleBrandingAsset},
 
 		// First-run setup (local listener only, before setup)
 		{P, "/api/setup/begin", SetupOnly, true, s.handleSetupBegin},
@@ -77,6 +78,9 @@ func (s *Server) table() []Route {
 		{G, "/api/settings", Authed, false, s.handleSettingsGet},
 		{U, "/api/settings", StepUp, false, s.handleSettingsPut},
 		{G, "/api/audit", Authed, false, s.handleAudit},
+		{U, "/api/branding", StepUp, false, s.handleBrandingPut},
+		{U, "/api/branding/{asset}", StepUp, false, s.handleBrandingAssetPut},
+		{D, "/api/branding/{asset}", StepUp, false, s.handleBrandingAssetDelete},
 		{G, "/api/authelia/notification", Authed, false, s.handleAutheliaNotification},
 
 		// DNS profiles

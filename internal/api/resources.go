@@ -194,6 +194,9 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request, rc *r
 		HubTitle              string          `json:"hub_title"`
 		HubWidgets            []string        `json:"hub_widgets"`
 		HubBackground         bool            `json:"hub_background"`
+		// Round-tripped from GET but changed through PUT /api/branding.
+		BrandName   string `json:"brand_name"`
+		AccentColor string `json:"accent_color"`
 	}
 	if err := decode(r, &req); err != nil {
 		return err
@@ -759,7 +762,7 @@ func (s *Server) handleRouteCreate(w http.ResponseWriter, r *http.Request, rc *r
 	}
 	s.audit(r, rc, "route.create", rt.Name, true, rt.Host+rt.PathPrefix)
 	a := affectsCaddy
-	if rt.Auth == store.AuthAuthelia {
+	if store.UsesAuthelia(rt.Auth) {
 		a = affectsBoth
 	}
 	if err := s.commit(ctx, rc, "route "+rt.Name+" added", a, func(ctx context.Context) error {
@@ -797,7 +800,7 @@ func (s *Server) handleRouteUpdate(w http.ResponseWriter, r *http.Request, rc *r
 	}
 	s.audit(r, rc, "route.update", rt.Name, true, rt.Host+rt.PathPrefix)
 	a := affectsCaddy
-	if rt.Auth != prev.Auth || rt.Host != prev.Host || rt.Enabled != prev.Enabled {
+	if rt.Auth != prev.Auth || rt.Host != prev.Host || rt.PathPrefix != prev.PathPrefix || rt.Enabled != prev.Enabled {
 		a = affectsBoth
 	}
 	if err := s.commit(ctx, rc, "route "+rt.Name+" updated", a, func(ctx context.Context) error {
