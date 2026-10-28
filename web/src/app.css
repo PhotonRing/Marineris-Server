@@ -150,6 +150,10 @@ pre {
   font-size: 1.5rem;
   font-weight: 700;
 }
+.nav a svg {
+  flex: none;
+  opacity: 0.85;
+}
 .nav a {
   display: flex;
   align-items: center;
@@ -907,5 +911,76 @@ pre.logs {
 @media (max-width: 860px) {
   .stack-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Icons (Lucide) ------------------------------------------------------------- */
+.lucide-icon {
+  flex: none;
+}
+.row.tight {
+  gap: 0.25rem;
+  flex-wrap: nowrap;
+}
+.row.inline {
+  display: inline-flex;
+}
+.tile-lock {
+  display: inline-flex;
+  vertical-align: -2px;
+  color: var(--muted);
+}
+.main-star {
+  display: inline-flex;
+  margin-left: 0.3rem;
+  vertical-align: -1px;
+  color: var(--accent);
+}
+.user-chip {
+  gap: 0.3rem;
+}
+
+.tabs.no-margin {
+  margin-bottom: 0;
+  border-bottom: none;
+}
+.card.kv {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-start;
+}
+tr.muted td {
+  opacity: 0.6;
+}
+.key-help {
+  margin: -0.2rem 0 0.2rem;
+}
+.mounts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: flex-start;
+}
+.mount-row {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1.2fr) minmax(0, 1fr) 4.5rem 2.2rem;
+  gap: 0.5rem;
+  align-items: center;
+  width: 100%;
+}
+.mount-row .row.nowrap > select {
+  flex: 1;
+  min-width: 0;
+}
+.mount-head {
+  font-weight: 600;
+}
+@media (max-width: 860px) {
+  .mount-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .mount-head {
+    display: none;
   }
 }

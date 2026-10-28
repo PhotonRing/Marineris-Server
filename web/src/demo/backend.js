@@ -3,7 +3,7 @@
 // same response shapes, validation of the main inputs, configuration
 // history and audit log. Nothing leaves the browser.
 import { seed } from './data.js';
-import { parseServices, editService } from './compose.js';
+import { parseServices, editService, topVolumes } from './compose.js';
 
 const db = seed();
 let nextId = 100;
@@ -119,7 +119,48 @@ function stackCheck(compose, ack) {
   if (/pid:\s*["']?host/.test(compose)) add('host_pid', 'the host PID namespace exposes every process of the host', true);
   if (/cap_add:[\s\S]*SYS_ADMIN/.test(compose)) add('capability', 'SYS_ADMIN is almost equivalent to root on the host', true);
   if (/-\s*\/(etc|proc|sys|boot|root)(\/|:)/.test(compose)) add('bind_mount', 'host system folders cannot be mounted', false);
+  if (/io\.marineris\.system/.test(compose)) add('label', 'the io.marineris.system label is reserved for the containers of Marineris itself', false);
   return { violations: v, blocking: v.filter((x) => !(ack && x.overridable)) };
+}
+
+// Plain-terms view of the generated configurations (internal/api/config_summary.go).
+function configSummary() {
+  const st = db.settings;
+  const rate = (rl) => (rl && rl.events ? `${rl.events} / ${rl.window}` : '');
+  const cert = (host) => {
+    const d = db.domains.filter((x) => host === x.name || host.endsWith('.' + x.name)).sort((a, b) => b.name.length - a.name.length)[0];
+    if (!d) return 'none (not in a managed domain)';
+    if (d.wildcard && d.dns_profile_id && host !== d.name && host.split('.').length === d.name.split('.').length + 1) return `wildcard *.${d.name} (DNS-01)`;
+    return d.dns_profile_id ? 'own certificate (DNS-01)' : 'own certificate (HTTP-01)';
+  };
+  const target = (r) => (r.kind === 'container' ? `container ${r.target.container}:${r.target.port}` : r.kind === 'external' ? r.target.url : `${r.kind === 'spa' ? 'single-page app' : 'static folder'} · ${r.target.folder}`);
+  const sites = [];
+  if (st.ui_host) sites.push({ address: st.ui_host, role: 'ui', name: 'Marineris', target: 'Marineris web UI', access: st.ui_protect_with_authelia ? 'admins' : 'none', rate_limit: `${rate(st.login_rate_limit)} (login)`, tls: cert(st.ui_host), enabled: true, link: '/settings' });
+  for (const d of db.domains) sites.push({ address: `${st.auth_subdomain}.${d.name}`, role: 'portal', name: 'Authelia portal', target: 'Authelia login portal', access: 'none', rate_limit: '', tls: cert(`${st.auth_subdomain}.${d.name}`), enabled: true, link: '/domains' });
+  for (const r of [...db.routes].sort((a, b) => (a.host + a.path_prefix).localeCompare(b.host + b.path_prefix))) {
+    sites.push({ address: r.host + (r.path_prefix || ''), role: 'route', name: r.name, target: target(r), access: r.auth, rate_limit: rate(r.rate_limit || st.default_rate_limit), tls: cert(r.host), enabled: r.enabled, link: '/routes' });
+  }
+  const protectedRes = [
+    ...db.routes.filter((r) => r.enabled && r.auth !== 'none').map((r) => ({ host: r.host, path: r.path_prefix || '', admin: r.auth === 'admins' })),
+    ...(st.ui_host && st.ui_protect_with_authelia ? [{ host: st.ui_host, path: '', admin: true }] : []),
+  ].sort((a, b) => a.host.localeCompare(b.host) || b.path.length - a.path.length);
+  const rules = [];
+  for (const res of protectedRes) {
+    const resources = res.path ? [`^${res.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([/?#].*)?$`] : [];
+    if (res.admin) rules.push({ domains: [res.host], resources, subjects: ['group:admins'], policy: 'two_factor' }, { domains: [res.host], resources, subjects: [], policy: 'deny' });
+    else rules.push({ domains: [res.host], resources, subjects: [], policy: 'two_factor' });
+  }
+  return {
+    caddy: { ca: st.acme_staging ? "Let's Encrypt staging (untrusted certificates)" : "Let's Encrypt", acme_email: st.acme_email, crowdsec: st.crowdsec_enabled, default_rate_limit: rate(st.default_rate_limit), sites },
+    authelia: {
+      default_policy: 'deny', rules,
+      portals: db.domains.map((d) => ({ domain: d.name, url: `https://${st.auth_subdomain}.${d.name}` })),
+      users: [{ username: 'admin', groups: ['admins'], disabled: false }],
+      second_factors: ['TOTP', 'Passkeys (WebAuthn)'],
+      session: { expiration: '12h', inactivity: '30m' },
+      regulation: { max_retries: 5, find_time: '10m', ban_time: '30m' },
+    },
+  };
 }
 
 // Same rules as internal/api/stack_services.go.
@@ -148,7 +189,7 @@ function stackServices(s) {
   for (const v of services) v.main = v.name === main;
   let state = containersState(services.flatMap((v) => v.containers));
   if ((state === 'running' || state === 'starting') && services.some((v) => !v.containers.length)) state = 'partial';
-  return { main, icon: services.find((v) => v.main)?.icon || '', state, services };
+  return { main, icon: services.find((v) => v.main)?.icon || '', state, services, volumes: topVolumes(s.compose), bind_roots: ['/srv', '/mnt', '/media'] };
 }
 
 function stackView(s) {
@@ -473,8 +514,12 @@ const routes = [
     const s = db.stacks.find((x) => x.name === p.name);
     if (!s || !parseServices(s.compose).some((d) => d.name === p.service)) return notFound();
     const { deploy, ...edit } = b;
-    for (const v of edit.environment || []) if (/[= \t]/.test(v.key)) return fail(400, 'bad_request', `environment: invalid variable name "${v.key}"`);
-    const compose = editService(s.compose, p.service, edit);
+    let compose;
+    try {
+      compose = editService(s.compose, p.service, edit);
+    } catch (err) {
+      return fail(400, 'bad_request', err.message);
+    }
     const { blocking } = stackCheck(compose, s.unsafe_ack);
     if (blocking.length) return fail(422, 'policy', 'the stack violates the security policy', blocking);
     Object.assign(s, { compose, updated_at: iso() });
@@ -532,6 +577,7 @@ const routes = [
   }],
   ['GET', '/api/networks', () => ok(db.networks)],
 
+  ['GET', '/api/config/summary', () => ok(configSummary())],
   ['GET', '/api/config/components/{component}/current', (p) => (db.configs[p.component] ? ok({ component: p.component, content: db.configs[p.component] }) : notFound())],
   ['GET', '/api/config/components/{component}/history', (p) => ok(db.history.filter((v) => v.component === p.component))],
   ['GET', '/api/config/versions/{id}', (p) => { const v = db.history.find((x) => x.id === +p.id); return v ? ok({ version: v, content: db.configs[v.component] }) : notFound(); }],

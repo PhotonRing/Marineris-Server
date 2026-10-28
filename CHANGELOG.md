@@ -32,8 +32,22 @@ the list of commits and the image digests — then deletes merged branches.
 - **Branding from the UI** (Settings → Branding): name, accent colour,
   favicon, header icon and background image.
 
+- **Proxy & SSO** overview: what Caddy serves (address, target, access, rate
+  limit, certificate) and Authelia's access rules, portals, sessions and
+  accounts, each with a link to the page that changes it.
+- Stack page: a **Labels** tab, suggesting the labels Marineris reads
+  (`io.marineris.main`, `io.marineris.icon`) with their meaning; a **Mounts**
+  tab with typed mounts: a volume (of the stack, another existing Docker
+  volume or a new one, declared in the file automatically), an anonymous
+  volume or a host folder, and read-only.
+
 ### Changed
 
+- The *Configuration* page is now **Proxy & SSO** (Overview, History,
+  Generated file): it was easy to confuse with *Settings*.
+- Icons: one open-source set ([Lucide](https://lucide.dev), ISC licence),
+  single-colour, in the menu, the top bar, the hub and the stack page; the
+  account is shown with a user icon and Settings with a cog.
 - The public Marineris UI host is restricted to administrators in Authelia
   (it was open to any Authelia account; there are no others yet).
 - The hub background covers the whole window (it stopped at the content

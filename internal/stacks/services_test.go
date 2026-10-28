@@ -113,3 +113,65 @@ func TestEditService(t *testing.T) {
 		t.Fatalf("injection:\n%s", out)
 	}
 }
+
+func TestMountsAndLabels(t *testing.T) {
+	svcs, err := Services([]byte(mediaCompose))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Mount{{Type: "volume", Source: "config", Target: "/config"}, {Type: "bind", Source: "/srv/media", Target: "/media", ReadOnly: true}}
+	if len(svcs[0].Mounts) != 2 || svcs[0].Mounts[0] != want[0] || svcs[0].Mounts[1] != want[1] {
+		t.Fatalf("mounts: %+v", svcs[0].Mounts)
+	}
+	if m := svcs[1].Mounts; len(m) != 1 || m[0] != (Mount{Type: "bind", Source: "./data", Target: "/data"}) {
+		t.Fatalf("long-syntax mount: %+v", m)
+	}
+	if ParseMount("/cache") != (Mount{Type: "volume", Target: "/cache"}) {
+		t.Fatal("anonymous volume")
+	}
+
+	mounts := []Mount{
+		{Type: "volume", Source: "config", Target: "/config"},
+		{Type: "volume", Source: "photos", Target: "/photos", ReadOnly: true},
+		{Type: "volume", Source: "media_shared", Target: "/shared", External: true},
+		{Type: "bind", Source: "./cache", Target: "/cache"},
+		{Type: "volume", Target: "/tmp/scratch"},
+	}
+	labels := []EnvVar{{Key: MainLabel, Value: "true"}, {Key: IconLabel, Value: "jellyfin"}}
+	out, err := EditService([]byte(mediaCompose), "jellyfin", ServiceEdit{Mounts: &mounts, Labels: &labels})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	for _, w := range []string{"- config:/config", "- photos:/photos:ro", "- ./cache:/cache", "- /tmp/scratch", "photos: {}", "media_shared: {external: true}", `io.marineris.icon: "jellyfin"`} {
+		if !strings.Contains(s, w) {
+			t.Errorf("missing %q in\n%s", w, s)
+		}
+	}
+	if strings.Count(s, "config: {}") != 1 {
+		t.Errorf("config declared twice:\n%s", s)
+	}
+	if _, vs, err := manager(t).Load(context.Background(), "media", out, []byte("TZ=UTC\n")); err != nil || len(vs) != 0 {
+		t.Fatalf("edited document: %v %+v", err, vs)
+	}
+	j, _ := Services(out)
+	if j[0].Icon() != "jellyfin" || !j[0].Main() {
+		t.Fatalf("labels: %+v", j[0].Labels)
+	}
+
+	for name, m := range map[string]Mount{
+		"relative target": {Type: "volume", Source: "x", Target: "data"},
+		"bad volume name": {Type: "volume", Source: "../etc", Target: "/x"},
+		"bind not a path": {Type: "bind", Source: "etc", Target: "/x"},
+		"colon injection": {Type: "bind", Source: "/srv/a:/etc", Target: "/x"},
+		"unknown type":    {Type: "tmpfs", Target: "/x"},
+		"ro anonymous":    {Type: "volume", Target: "/x", ReadOnly: true},
+	} {
+		if _, err := EditService([]byte(mediaCompose), "jellyfin", ServiceEdit{Mounts: &[]Mount{m}}); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if _, err := EditService([]byte(mediaCompose), "jellyfin", ServiceEdit{Labels: &[]EnvVar{{Key: "a: b"}}}); err == nil {
+		t.Error("bad label name accepted")
+	}
+}

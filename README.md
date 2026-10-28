@@ -30,17 +30,21 @@
 - **One source of truth.** Marineris generates and applies the configuration of
   Caddy and Authelia from its own database. Every change is validated (by the
   real `caddy` and `authelia` binaries), snapshotted, applied, health-checked and
-  **rolled back automatically** on failure. Full, encrypted config history with
-  one-click restore.
+  **rolled back automatically** on failure. The **Proxy & SSO** page explains
+  in plain terms what they do (sites, access, certificates, Authelia's access
+  rules and sessions), with the full, encrypted history (one-click restore) and
+  the generated files.
 - **Containers & stacks.** List, start, stop, restart, logs and details;
   docker-compose stacks (Docker Compose SDK) with a **security policy**: no
   `privileged`, host namespaces, dangerous capabilities, devices, Docker socket
   or host-system mounts unless you explicitly allow the overridable ones.
   Each stack has its own page: the status and icon of every service; start,
   stop, restart, recreate or update one service or the whole stack; tabs to
-  follow a service's logs and edit its image, environment, mounts, networks
-  and ports (written back to `compose.yaml`, checked against the policy), or
-  edit the whole file. Icons are picked automatically from the image name
+  follow a service's logs and edit its image, environment, mounts (volume —
+  of the stack, another existing one or a new one — or host folder,
+  read-only), networks, ports and labels (with suggestions for the Marineris
+  labels), all written back to `compose.yaml` and checked against the policy;
+  or edit the whole file. Icons are picked automatically from the image name
   ([dashboard-icons](https://github.com/homarr-labs/dashboard-icons)), or set
   with an `io.marineris.icon` label or from the UI; the stack takes the icon
   of its main service (`io.marineris.main: "true"`, else the one published by
@@ -140,8 +144,8 @@ Full guide: [docs/install.md](docs/install.md).
 
 | Phase | Scope |
 |---|---|
-| 1 ✅ | Repository, CI, compose stack, first-run setup, containers/stacks (stack page with per-service status, actions, editing and icons), routes (public, 2FA or admins only), multi-domain certificates with DNS profiles, passkeys, branding from the UI |
-| 2 | Users, groups and OIDC clients UI; per-route access by user and group (beyond "administrators only"); CrowdSec UI (decisions, allow-lists, alerts); dashboard; monitoring and alerts, with per-service CPU, memory and network graphs on the stack page; live log streaming; advanced raw-config editor |
+| 1 ✅ | Repository, CI, compose stack, first-run setup, containers/stacks (stack page with per-service status, actions, editing of mounts, labels and more, icons), routes (public, 2FA or admins only), multi-domain certificates with DNS profiles, passkeys, branding from the UI, Proxy & SSO overview |
+| 2 | Users, groups and OIDC clients UI; per-route access by user and group (beyond "administrators only"); CrowdSec UI (decisions, allow-lists, alerts); dashboard; monitoring and alerts, with per-service CPU, memory and network graphs on the stack page; live log streaming; **Proxy & SSO editing**: Authelia settings from the UI (session lifetimes, login ban, password policy, e-mail notifier) and raw Caddy/Authelia edits kept across regenerations (validated overrides); mount options beyond read-only (tmpfs, bind propagation, volume sub-paths, NFS/CIFS volumes) |
 | 3 | Backups (restic); **web terminal** inside containers (the stack page's Terminal tab: needs Docker `exec` through the socket proxy, with audit and step-up); stacks built from a Git repository or Dockerfile ("rebuild"); marketplace (Cosmos-compatible catalogs, compose templates, app icons) |
 | 4 | Disk manager: SMART, mdadm RAID (incl. RAID10), privileged helper with a fixed command set |
 
@@ -155,3 +159,7 @@ The branding assets in [`branding/`](branding/) are under the same licence
 with [additional terms](branding/LICENSE) (AGPL-3.0 section 7(c) and 7(e)):
 forks that are distributed or offered over a network use their own name and
 logo. See the [name and logo policy](TRADEMARKS.md).
+
+The interface icons are [Lucide](https://lucide.dev) (ISC licence,
+© Lucide Contributors); app icons are downloaded from
+[dashboard-icons](https://github.com/homarr-labs/dashboard-icons) (Apache-2.0).

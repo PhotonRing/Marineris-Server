@@ -18,4 +18,4 @@
    database newer than itself (downgrades need the backup).
 
 **Verify:** `docker compose ps` all healthy, the dashboard shows the new
-version, **Configuration** shows a successful *startup* apply.
+version, **Proxy & SSO** → **History** shows a successful *startup* apply.

@@ -27,6 +27,17 @@ type EnvVar struct {
 	Unset bool   `json:"unset,omitempty"`
 }
 
+// Mount is one entry of a service's volumes, as the stack page edits it.
+type Mount struct {
+	Type     string `json:"type"`   // "volume" or "bind"
+	Source   string `json:"source"` // volume name (empty: anonymous) or host path
+	Target   string `json:"target"` // path inside the container
+	ReadOnly bool   `json:"read_only"`
+	// External declares a volume that the stack does not own (an existing
+	// Docker volume) when it is not declared in the file yet.
+	External bool `json:"external,omitempty"`
+}
+
 // Service is the editable part of a service definition, read from the
 // compose document as written (before interpolation).
 type Service struct {
@@ -35,6 +46,7 @@ type Service struct {
 	Restart     string   `json:"restart"`
 	Environment []EnvVar `json:"environment"`
 	Volumes     []string `json:"volumes"`
+	Mounts      []Mount  `json:"mounts"`
 	Ports       []string `json:"ports"`
 	Networks    []string `json:"networks"`
 	Labels      []EnvVar `json:"labels"`
@@ -69,7 +81,7 @@ func Services(composeYAML []byte) ([]Service, error) {
 	out := []Service{}
 	for i := 0; i+1 < len(services.Content); i += 2 {
 		name, def := services.Content[i].Value, services.Content[i+1]
-		s := Service{Name: name, Environment: []EnvVar{}, Volumes: []string{}, Ports: []string{}, Networks: []string{}, Labels: []EnvVar{}, LongSyntax: []string{}}
+		s := Service{Name: name, Environment: []EnvVar{}, Volumes: []string{}, Mounts: []Mount{}, Ports: []string{}, Networks: []string{}, Labels: []EnvVar{}, LongSyntax: []string{}}
 		if def.Kind != yaml.MappingNode {
 			out = append(out, s)
 			continue
@@ -100,6 +112,7 @@ func Services(composeYAML []byte) ([]Service, error) {
 				}
 				if key == "volumes" {
 					s.Volumes = items
+					s.Mounts = readMounts(val)
 				} else {
 					s.Ports = items
 				}
@@ -122,6 +135,113 @@ func Services(composeYAML []byte) ([]Service, error) {
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// readMounts reads volumes entries in the short ("src:dst:ro") or long
+// (mapping) syntax.
+func readMounts(n *yaml.Node) []Mount {
+	out := []Mount{}
+	if n.Kind != yaml.SequenceNode {
+		return out
+	}
+	for _, item := range n.Content {
+		switch item.Kind {
+		case yaml.ScalarNode:
+			out = append(out, ParseMount(item.Value))
+		case yaml.MappingNode:
+			m := Mount{Type: "volume"}
+			for i := 0; i+1 < len(item.Content); i += 2 {
+				v := item.Content[i+1].Value
+				switch item.Content[i].Value {
+				case "type":
+					m.Type = v
+				case "source":
+					m.Source = v
+				case "target":
+					m.Target = v
+				case "read_only":
+					m.ReadOnly = v == "true"
+				}
+			}
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// ParseMount reads a short-syntax volumes entry.
+func ParseMount(s string) Mount {
+	parts := strings.Split(s, ":")
+	m := Mount{Type: "volume"}
+	switch len(parts) {
+	case 1:
+		m.Target = parts[0] // anonymous volume
+		return m
+	case 2:
+		m.Source, m.Target = parts[0], parts[1]
+	default:
+		m.Source, m.Target = parts[0], parts[1]
+		for _, opt := range strings.Split(parts[2], ",") {
+			m.ReadOnly = m.ReadOnly || opt == "ro"
+		}
+	}
+	if strings.HasPrefix(m.Source, "/") || strings.HasPrefix(m.Source, ".") || strings.HasPrefix(m.Source, "~") || strings.HasPrefix(m.Source, "$") {
+		m.Type = "bind"
+	}
+	return m
+}
+
+var volumeNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+
+// shortSyntax writes a mount in the short syntax and checks it.
+func (m Mount) shortSyntax() (string, error) {
+	target := strings.TrimSpace(m.Target)
+	src := strings.TrimSpace(m.Source)
+	if !strings.HasPrefix(target, "/") || strings.ContainsAny(target, ": \t\n") {
+		return "", fmt.Errorf("mounts: the container path %q must be absolute (/data), without ':' or spaces", target)
+	}
+	if strings.ContainsAny(src, ":\n") {
+		return "", fmt.Errorf("mounts: the source %q cannot contain ':'", src)
+	}
+	switch m.Type {
+	case "volume":
+		if src == "" {
+			if m.ReadOnly {
+				return "", errors.New("mounts: an anonymous volume cannot be read-only")
+			}
+			return target, nil
+		}
+		if !volumeNameRE.MatchString(src) {
+			return "", fmt.Errorf("mounts: invalid volume name %q", src)
+		}
+	case "bind":
+		if !(strings.HasPrefix(src, "/") || strings.HasPrefix(src, "./") || strings.HasPrefix(src, "../") || src == ".") {
+			return "", fmt.Errorf("mounts: the host path %q must be absolute (/srv/…) or relative to the stack (./data)", src)
+		}
+	default:
+		return "", fmt.Errorf("mounts: unknown type %q (volume or bind)", m.Type)
+	}
+	out := src + ":" + target
+	if m.ReadOnly {
+		out += ":ro"
+	}
+	return out, nil
+}
+
+// TopVolumes returns the volumes declared at the top level of a compose
+// document.
+func TopVolumes(composeYAML []byte) []string {
+	out := []string{}
+	doc, _, err := parse(composeYAML)
+	if err != nil {
+		return out
+	}
+	if vols := mapGet(doc.Content[0], "volumes"); vols != nil && vols.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(vols.Content); i += 2 {
+			out = append(out, vols.Content[i].Value)
+		}
+	}
+	return out
 }
 
 func appendOnce(list []string, v string) []string {
@@ -208,6 +328,8 @@ type ServiceEdit struct {
 	Restart     *string   `json:"restart,omitempty"`
 	Environment *[]EnvVar `json:"environment,omitempty"`
 	Volumes     *[]string `json:"volumes,omitempty"`
+	Mounts      *[]Mount  `json:"mounts,omitempty"`
+	Labels      *[]EnvVar `json:"labels,omitempty"`
 	Ports       *[]string `json:"ports,omitempty"`
 	Networks    *[]string `json:"networks,omitempty"`
 }
@@ -252,34 +374,76 @@ func EditService(composeYAML []byte, service string, e ServiceEdit) ([]byte, err
 		}
 		mapSet(def, key, seq)
 	}
-	str("image", e.Image)
-	str("restart", e.Restart)
-	if e.Environment != nil {
-		env := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	keyValues := func(key string, vars *[]EnvVar) error {
+		if vars == nil {
+			return nil
+		}
+		kv := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		seen := map[string]bool{}
-		for _, v := range *e.Environment {
+		for _, v := range *vars {
 			k := strings.TrimSpace(v.Key)
 			if k == "" {
 				continue
 			}
-			if strings.ContainsAny(k, "= \t\n") {
-				return nil, fmt.Errorf("environment: invalid variable name %q", k)
+			if strings.ContainsAny(k, "= \t\n:") {
+				return fmt.Errorf("%s: invalid name %q", key, k)
 			}
 			if seen[k] {
-				return nil, fmt.Errorf("environment: %s is set twice", k)
+				return fmt.Errorf("%s: %s is set twice", key, k)
 			}
 			seen[k] = true
 			val := &yaml.Node{Kind: yaml.ScalarNode, Value: v.Value, Style: yaml.DoubleQuotedStyle}
 			if v.Unset {
 				val = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: ""}
 			}
-			env.Content = append(env.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: k}, val)
+			kv.Content = append(kv.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: k}, val)
 		}
-		if len(env.Content) == 0 {
-			mapDelete(def, "environment")
+		if len(kv.Content) == 0 {
+			mapDelete(def, key)
 		} else {
-			mapSet(def, "environment", env)
+			mapSet(def, key, kv)
 		}
+		return nil
+	}
+	str("image", e.Image)
+	str("restart", e.Restart)
+	if err := keyValues("environment", e.Environment); err != nil {
+		return nil, err
+	}
+	if err := keyValues("labels", e.Labels); err != nil {
+		return nil, err
+	}
+	if e.Mounts != nil {
+		if e.Volumes != nil {
+			return nil, errors.New("give mounts or volumes, not both")
+		}
+		vols := []string{}
+		declared := map[string]bool{}
+		for _, v := range TopVolumes(composeYAML) {
+			declared[v] = true
+		}
+		top := mapGet(doc.Content[0], "volumes")
+		for _, m := range *e.Mounts {
+			s, err := m.shortSyntax()
+			if err != nil {
+				return nil, err
+			}
+			vols = append(vols, s)
+			// A named volume must be declared at the top level.
+			if src := strings.TrimSpace(m.Source); m.Type == "volume" && src != "" && !declared[src] {
+				declared[src] = true
+				if top == nil || top.Kind != yaml.MappingNode {
+					top = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+					mapSet(doc.Content[0], "volumes", top)
+				}
+				decl := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Style: yaml.FlowStyle}
+				if m.External {
+					decl.Content = []*yaml.Node{{Kind: yaml.ScalarNode, Value: "external"}, {Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"}}
+				}
+				top.Content = append(top.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: src}, decl)
+			}
+		}
+		e.Volumes = &vols
 	}
 	list("volumes", e.Volumes)
 	list("ports", e.Ports)

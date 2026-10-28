@@ -1,4 +1,6 @@
 <script>
+  import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+  import Star from '@lucide/svelte/icons/star';
   // One stack: its services with their status and actions, and per-service
   // tabs to read logs and edit the service (written back to compose.yaml).
   import { onMount, onDestroy } from 'svelte';
@@ -10,6 +12,7 @@
   import StateBadge from '../components/StateBadge.svelte';
   import ListEditor from '../components/ListEditor.svelte';
   import EnvEditor from '../components/EnvEditor.svelte';
+  import MountsEditor from '../components/MountsEditor.svelte';
 
   const name = decodeURIComponent($path.split('/')[2] || '');
   const base = `/api/stacks/${encodeURIComponent(name)}`;
@@ -20,6 +23,7 @@
     ['env', 'Environment'],
     ['mounts', 'Mounts'],
     ['network', 'Network'],
+    ['labels', 'Labels'],
     ['icon', 'Icon'],
     ['terminal', 'Terminal'],
   ];
@@ -33,6 +37,13 @@
   let saved = $state(''); // JSON of the form as loaded, to detect changes
   let busy = $state('');
   let networkNames = $state([]);
+  let dockerVolumes = $state([]);
+
+  // Labels Marineris reads, offered when typing a label name.
+  const labelSuggestions = [
+    { key: 'io.marineris.main', values: ['true', 'false'], help: 'Main service: its icon represents the stack.' },
+    { key: 'io.marineris.icon', placeholder: 'jellyfin or https://…/icon.png', help: 'Icon: a dashboard-icons name or an https URL, downloaded at the next deployment.' },
+  ];
   let timer;
 
   // Compose editor (whole stack).
@@ -90,6 +101,9 @@
     get('/api/networks')
       .then((ns) => (networkNames = ns.map((n) => n.name)))
       .catch(() => {});
+    get('/api/volumes')
+      .then((vs) => (dockerVolumes = vs.filter((v) => !v.system && v.stack !== name).map((v) => v.name)))
+      .catch(() => {});
     timer = setInterval(() => !document.hidden && loadSummary(), 5000);
   });
 
@@ -107,7 +121,8 @@
       image: svc.image,
       restart: svc.restart,
       environment: svc.environment.map((v) => ({ key: v.key, value: v.value, unset: !!v.unset })),
-      volumes: [...svc.volumes],
+      mounts: svc.mounts.map((m) => ({ ...m, external: false, newVolume: false })),
+      labels: svc.labels.map((v) => ({ key: v.key, value: v.value, unset: !!v.unset })),
       ports: [...svc.ports],
       networks: [...svc.networks],
     };
@@ -170,8 +185,11 @@
 
   async function saveService(deploy) {
     const body = { deploy };
-    for (const k of ['image', 'restart', 'environment', 'volumes', 'ports', 'networks']) {
+    for (const k of ['image', 'restart', 'environment', 'ports', 'networks', 'labels']) {
       if (!long.has(k)) body[k] = $state.snapshot(form[k]);
+    }
+    if (!long.has('volumes')) {
+      body.mounts = form.mounts.map((m) => ({ type: m.type, source: m.source.trim(), target: m.target.trim(), read_only: m.read_only, external: !!m.external }));
     }
     await run(
       'save',
@@ -250,7 +268,7 @@
 </script>
 
 <div class="stack">
-  <a href="/stacks" use:link class="small">← All stacks</a>
+  <a href="/stacks" use:link class="small row tight"><ArrowLeft size={14} aria-hidden="true" />All stacks</a>
   {#if error}<div class="alert error">{error}</div>{/if}
 
   {#if stack && summary}
@@ -281,7 +299,7 @@
           <button class="service-item" class:active={selected === s.name} onclick={() => pick(s.name)}>
             <AppIcon src={s.icon} name={s.name} size={32} />
             <span class="service-text">
-              <span class="service-name">{s.name}{#if s.main}<span class="muted" title="Main service: its icon is the stack's"> ★</span>{/if}</span>
+              <span class="service-name">{s.name}{#if s.main}<span class="main-star" title="Main service: its icon is the stack's"><Star size={13} aria-label="main service" /></span>{/if}</span>
               <span class="muted small service-image">{s.image}</span>
             </span>
             <span class="dot {s.state === 'running' ? 'ok' : s.state === 'not_deployed' ? '' : s.state === 'stopped' || s.state === 'unhealthy' ? 'error' : 'warn'}" title={s.state}></span>
@@ -403,10 +421,9 @@
             <EnvEditor bind:vars={form.environment} disabled={long.has('environment')} />
           {:else if tab === 'mounts'}
             {#if long.has('volumes')}
-              <div class="alert warning">Some mounts use the long syntax: edit them in compose.yaml.</div>
+              <div class="alert warning">Some mounts use the long syntax, with options this editor does not know: edit them in compose.yaml.</div>
             {/if}
-            <p class="muted small"><code>volume:/path</code> for a named volume, <code>./folder:/path</code> for a folder of the stack, or <code>/srv/…:/path</code> inside an allowed root. Add <code>:ro</code> for read-only.</p>
-            <ListEditor bind:items={form.volumes} placeholder="config:/config" addLabel="Add mount" disabled={long.has('volumes')} />
+            <MountsEditor bind:mounts={form.mounts} declared={summary.volumes} {dockerVolumes} bindRoots={summary.bind_roots} disabled={long.has('volumes')} />
           {:else if tab === 'network'}
             <div class="grid">
               <div class="field">
@@ -422,11 +439,19 @@
                 <div class="help small muted">Usually not needed: routes reach the container directly. A published port bypasses Caddy, Authelia and CrowdSec.</div>
               </div>
             </div>
+          {:else if tab === 'labels'}
+            {#if long.has('labels')}
+              <div class="alert warning">The labels are written in a form this editor cannot change: edit them in compose.yaml.</div>
+            {/if}
+            <p class="muted small">Docker labels of the service's containers. Start typing <code>io.marineris</code> for the ones Marineris reads.</p>
+            <EnvEditor bind:vars={form.labels} unsetOption={false} suggestions={labelSuggestions} keyPlaceholder="io.marineris.main" addLabel="Add label" disabled={long.has('labels')} />
           {:else if tab === 'icon'}
             <div class="row">
               <AppIcon src={svc.icon} name={svc.name} size={64} />
               <div class="muted small">
                 {#if svc.icon_source === 'custom'}Custom icon.{:else if svc.icon_source === 'route'}Icon of the route that publishes this service.{:else}No icon yet: initials are shown.{/if}
+                {#if svc.main}<div>This is the stack's main service: its icon represents the stack.</div>
+                {:else}<div>To use it for the stack, add the label <code>io.marineris.main</code> = <code>true</code> in the Labels tab.</div>{/if}
               </div>
             </div>
             <div class="tabs mt">
@@ -454,7 +479,7 @@
             </div>
           {/if}
 
-          {#if ['overview', 'env', 'mounts', 'network'].includes(tab)}
+          {#if ['overview', 'env', 'mounts', 'network', 'labels'].includes(tab)}
             <div class="row end mt">
               {#if dirty}<span class="muted small">Unsaved changes</span>{/if}
               <button onclick={resetForm} disabled={!dirty || !!busy}>Reset</button>

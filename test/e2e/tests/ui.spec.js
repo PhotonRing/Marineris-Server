@@ -52,7 +52,7 @@ test('setup wizard', async ({ page }) => {
 test('every page renders without errors or CSP violations', async ({ page }) => {
   const problems = watchConsole(page);
   await login(page, 1);
-  for (const name of ['Dashboard', 'Containers', 'Stacks', 'Volumes & networks', 'Routes', 'Domains & certificates', 'DNS profiles', 'Configuration', 'Audit log', 'Settings', 'Account']) {
+  for (const name of ['Dashboard', 'Containers', 'Stacks', 'Volumes & networks', 'Routes', 'Domains & certificates', 'DNS profiles', 'Proxy & SSO', 'Audit log', 'Settings', 'Account']) {
     await page.getByRole('link', { name, exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
   }

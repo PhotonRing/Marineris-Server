@@ -1,4 +1,5 @@
 <script>
+  import ArrowRight from '@lucide/svelte/icons/arrow-right';
   import { onMount } from 'svelte';
   import { get, describe } from '../lib/api.js';
   import { link } from '../lib/router.js';
@@ -26,7 +27,7 @@
         {#each data.alerts as a}
           <div class="alert {a.level === 'error' ? 'error' : a.level === 'warning' ? 'warning' : ''}">
             {a.message}
-            {#if a.link}<a href={a.link} use:link> → open</a>{/if}
+            {#if a.link}<a href={a.link} use:link class="row tight inline">open<ArrowRight size={14} aria-hidden="true" /></a>{/if}
           </div>
         {/each}
       </div>

@@ -57,6 +57,28 @@ func TestStackServices(t *testing.T) {
 	if !strings.Contains(compose, `TZ: "Europe/Paris"`) || !strings.Contains(compose, `"8096:8096"`) || !strings.Contains(compose, "image: alpine:3") {
 		t.Fatalf("compose after edit:\n%s", compose)
 	}
+	// Labels and typed mounts; a new named volume is declared in the file.
+	r = must("PUT", "/api/stacks/media/services/jellyfin", map[string]any{
+		"labels": []map[string]any{{"key": "io.marineris.main", "value": "true"}},
+		"mounts": []map[string]any{{"type": "volume", "source": "library", "target": "/config"}, {"type": "bind", "source": "/srv/films", "target": "/films", "read_only": true}},
+	})
+	compose = r.Body["compose"].(string)
+	for _, want := range []string{"- library:/config", "- /srv/films:/films:ro", "library: {}", `io.marineris.main: "true"`} {
+		if !strings.Contains(compose, want) {
+			t.Fatalf("missing %q in\n%s", want, compose)
+		}
+	}
+	sum := must("GET", "/api/stacks/media/services", nil)
+	if sum.Body["main"] != "jellyfin" || !strings.Contains(string(sum.Raw), `"volumes":["library"]`) || !strings.Contains(string(sum.Raw), `"bind_roots":["/srv"]`) {
+		t.Fatalf("summary after labels and mounts: %s", sum.Raw)
+	}
+	if r := admin.do("PUT", "/api/stacks/media/services/jellyfin", map[string]any{"mounts": []map[string]any{{"type": "bind", "source": "/etc", "target": "/x"}}}); r.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("bind mount of /etc: %d %s", r.Status, r.Raw)
+	}
+	if r := admin.do("PUT", "/api/stacks/media/services/jellyfin", map[string]any{"labels": []map[string]any{{"key": "io.marineris.system", "value": "true"}}}); r.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("system label: %d %s", r.Status, r.Raw)
+	}
+
 	// The policy still applies.
 	if r := admin.do("PUT", "/api/stacks/media/services/jellyfin", map[string]any{"volumes": []string{"/var/run/docker.sock:/var/run/docker.sock"}}); r.Status != http.StatusUnprocessableEntity {
 		t.Fatalf("docker socket accepted: %d %s", r.Status, r.Raw)

@@ -358,11 +358,17 @@ networks:
 	}
 	before := a.must("GET", "/api/containers/it-web", nil)
 	a.must("PUT", "/api/stacks/demo/services/web", map[string]any{
-		"environment": []map[string]string{{"key": "GREETING", "value": "hello"}}, "deploy": true,
+		"environment": []map[string]string{{"key": "GREETING", "value": "hello"}},
+		"labels":      []map[string]string{{"key": "io.marineris.main", "value": "true"}},
+		"mounts":      []map[string]any{{"type": "volume", "source": "files", "target": "/srv/files", "read_only": true}},
+		"deploy":      true,
 	})
 	after := a.must("GET", "/api/containers/it-web", nil)
 	if after["id"] == before["id"] || !strings.Contains(fmt.Sprint(after["env"]), "GREETING=") {
 		t.Fatalf("the edited service was not recreated with its new environment: %v", after["env"])
+	}
+	if !strings.Contains(fmt.Sprint(after["mounts"]), "demo_files:/srv/files") || fmt.Sprint(after["labels"].(map[string]any)["io.marineris.main"]) != "true" {
+		t.Fatalf("the new volume or label is missing: %v %v", after["mounts"], after["labels"])
 	}
 	a.must("POST", "/api/stacks/demo/services/web/restart", nil)
 	a.must("POST", "/api/stacks/demo/services/web/update", nil)

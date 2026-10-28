@@ -2,10 +2,10 @@
 
 Marineris already rolls back automatically when a new configuration fails to
 load or fails its health check (the failed attempt is listed as *failed* or
-*rolled back* in **Configuration**). Use this runbook when a change was applied
+*rolled back* in **Proxy & SSO** → **History**). Use this runbook when a change was applied
 successfully but does something you did not want.
 
-1. **Configuration** → choose *Caddy* or *Authelia*.
+1. **Proxy & SSO** → choose *Caddy* or *Authelia* → **History**.
 2. Find the last good version (*superseded*), press **View** to check it, then
    **Restore** (asks you to confirm your identity).
 3. The restored version is applied through the same validate → apply →

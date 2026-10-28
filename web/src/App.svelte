@@ -21,23 +21,38 @@
   import Audit from './pages/Audit.svelte';
   import Settings from './pages/Settings.svelte';
   import Account from './pages/Account.svelte';
+  import House from '@lucide/svelte/icons/house';
+  import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
+  import Box from '@lucide/svelte/icons/box';
+  import Layers from '@lucide/svelte/icons/layers';
+  import HardDrive from '@lucide/svelte/icons/hard-drive';
+  import Route from '@lucide/svelte/icons/route';
+  import GlobeLock from '@lucide/svelte/icons/globe-lock';
+  import Network from '@lucide/svelte/icons/network';
+  import FileCog from '@lucide/svelte/icons/file-cog';
+  import ScrollText from '@lucide/svelte/icons/scroll-text';
+  import Settings2 from '@lucide/svelte/icons/settings';
+  import CircleUserRound from '@lucide/svelte/icons/circle-user-round';
+  import Sun from '@lucide/svelte/icons/sun';
+  import Moon from '@lucide/svelte/icons/moon';
 
+  // Icons: Lucide (ISC licence), drawn in the text colour.
   const pages = [
-    { path: '/hub', label: 'Hub', icon: '⌂', component: Hub },
-    { path: '/dashboard', label: 'Dashboard', icon: '◉', component: Dashboard },
+    { path: '/hub', label: 'Hub', icon: House, component: Hub },
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, component: Dashboard },
     { section: 'Workloads' },
-    { path: '/containers', label: 'Containers', icon: '▣', component: Containers },
-    { path: '/stacks', label: 'Stacks', icon: '☰', component: Stacks },
-    { path: '/storage', label: 'Volumes & networks', icon: '⛁', component: Storage },
+    { path: '/containers', label: 'Containers', icon: Box, component: Containers },
+    { path: '/stacks', label: 'Stacks', icon: Layers, component: Stacks },
+    { path: '/storage', label: 'Volumes & networks', icon: HardDrive, component: Storage },
     { section: 'Edge' },
-    { path: '/routes', label: 'Routes', icon: '⇄', component: Routes },
-    { path: '/domains', label: 'Domains & certificates', icon: '🔒', component: Domains },
-    { path: '/dns', label: 'DNS profiles', icon: '⌘', component: DNS },
+    { path: '/routes', label: 'Routes', icon: Route, component: Routes },
+    { path: '/domains', label: 'Domains & certificates', icon: GlobeLock, component: Domains },
+    { path: '/dns', label: 'DNS profiles', icon: Network, component: DNS },
     { section: 'System' },
-    { path: '/config', label: 'Configuration', icon: '⚙', component: Config },
-    { path: '/audit', label: 'Audit log', icon: '☷', component: Audit },
-    { path: '/settings', label: 'Settings', icon: '✦', component: Settings },
-    { path: '/account', label: 'Account', icon: '☺', component: Account },
+    { path: '/proxy', label: 'Proxy & SSO', icon: FileCog, component: Config },
+    { path: '/audit', label: 'Audit log', icon: ScrollText, component: Audit },
+    { path: '/settings', label: 'Settings', icon: Settings2, component: Settings },
+    { path: '/account', label: 'Account', icon: CircleUserRound, component: Account },
   ];
 
   // "/" shows the page chosen in Settings → Home page. /stacks/<name> is the
@@ -113,7 +128,7 @@
           {#if p.section}
             <div class="section">{p.section}</div>
           {:else}
-            <a href={p.path} use:link class:active={(current.nav || current.path) === p.path}><span aria-hidden="true">{p.icon}</span>{p.label}</a>
+            <a href={p.path} use:link class:active={(current.nav || current.path) === p.path}><p.icon size={18} aria-hidden="true" />{p.label}</a>
           {/if}
         {/each}
       </nav>
@@ -123,8 +138,8 @@
         {#if current.path === '/hub'}<span></span>{:else}<h1>{current.label}</h1>{/if}
         <div class="row">
           {#if app.meta.listener === 'local'}<span class="badge warn" title="Connected through the loopback listener">break-glass</span>{/if}
-          <span class="muted small">{app.session.user.username}</span>
-          <button class="ghost small" onclick={toggleTheme} aria-label="Toggle theme" title="Light / dark">☀ / ☾</button>
+          <span class="muted small row user-chip"><CircleUserRound size={16} aria-hidden="true" />{app.session.user.username}</span>
+          <button class="ghost small" onclick={toggleTheme} aria-label="Toggle theme" title="Light / dark"><Sun size={16} aria-hidden="true" /><Moon size={16} aria-hidden="true" /></button>
           <button class="small" onclick={doLogout}>Log out</button>
         </div>
       </div>

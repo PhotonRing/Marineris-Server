@@ -10,7 +10,7 @@ certificate problem, public UI host misconfigured).
 2. Open **http://localhost:8081** and log in with password + TOTP (or a
    passkey registered on `localhost`). A *break-glass* badge is shown.
    Lockouts caused by failed attempts on the public side do not apply here.
-3. Fix the problem: **Configuration** (restore a previous version), **Settings**,
+3. Fix the problem: **Proxy & SSO** → **History** (restore a previous version), **Settings**,
    **Routes**, **Domains**.
 
 If Authelia itself is broken and you need the public UI without it:

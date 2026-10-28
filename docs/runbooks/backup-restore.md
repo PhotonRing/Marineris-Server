@@ -31,5 +31,5 @@ sudo tar -C / -xzf /root/marineris-data-YYYY-MM-DD.tgz
 sudo docker compose up -d
 ```
 
-**Verify:** log in, check **Configuration** (a startup apply is recorded) and
+**Verify:** log in, check **Proxy & SSO** → **History** (a startup apply is recorded) and
 the **Certificates** page.
