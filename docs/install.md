@@ -27,7 +27,7 @@ sudo ./install.sh
 of the Docker socket. Edit `.env`:
 
 - `MARINERIS_IMAGE` / `MARINERIS_CADDY_IMAGE`: pin a release, e.g.
-  `ghcr.io/photonring/marineris:0.1.6` (and verify it, see the release notes).
+  `ghcr.io/photonring/marineris:0.1.7` (and verify it, see the release notes).
 - `MARINERIS_ALLOWED_BIND_ROOTS`: host folders your stacks may mount
   (default `/srv,/mnt,/media`).
 

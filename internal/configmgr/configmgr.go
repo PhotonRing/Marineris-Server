@@ -313,6 +313,10 @@ func (m *Manager) EnsureAutheliaFiles(ctx context.Context) error {
 	if err := authelia.EnsureSecrets(m.cfg.AutheliaSecrets()); err != nil {
 		return err
 	}
+	// Before Authelia starts: its configuration names the assets folder.
+	if err := m.writeAutheliaAssets(ctx); err != nil {
+		return err
+	}
 	dir := m.cfg.AutheliaDir()
 	if _, err := os.Stat(filepath.Join(dir, autheliaConfigFile)); err == nil {
 		return nil
@@ -371,6 +375,9 @@ func (m *Manager) ApplyAuthelia(ctx context.Context, actor, reason string) error
 	if err != nil {
 		return &ApplyError{Component: Authelia, Stage: "validate", Err: err}
 	}
+	if err := m.writeAutheliaAssets(ctx); err != nil {
+		return &ApplyError{Component: Authelia, Stage: "render", Err: err}
+	}
 	if err := m.applyAutheliaLocked(ctx, actor, reason, cfg, users); err != nil {
 		return err
 	}
@@ -403,6 +410,11 @@ func (m *Manager) applyAutheliaLocked(ctx context.Context, actor, reason string,
 		return err
 	}
 	if err := writePublic(filepath.Join(cand, autheliaUsersFile), users); err != nil {
+		return err
+	}
+	// The configuration names an assets folder, which must exist (its
+	// content does not matter to the validation).
+	if err := os.MkdirAll(filepath.Join(cand, autheliaAssetsDir), 0o750); err != nil {
 		return err
 	}
 	code, out, err := m.docker.Run(ctx, docker.RunSpec{

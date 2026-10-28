@@ -170,6 +170,8 @@ down() {
     rmdir "$BASE" 2>/dev/null || true
   fi
   echo "The demo is stopped and its data deleted."
+  echo "Passkeys saved for *.marineris.localhost in your browser or password manager"
+  echo "no longer work: delete them, then add new ones in the next demo."
 }
 
 case "${1:-}" in

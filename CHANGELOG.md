@@ -18,6 +18,34 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-28
+
+The sign-in page carries your branding, and passkey fixes.
+
+**Upgrading from 0.1.6:** in `.env`, set `MARINERIS_IMAGE` and
+`MARINERIS_CADDY_IMAGE` to the `0.1.7` tags, then
+`docker compose pull && docker compose up -d`. If signing in with a passkey
+failed, delete that passkey in your password manager and add it again in the
+Authelia portal.
+
+### Changed
+
+- **The Authelia sign-in page shows the brand's logo and favicon** (from
+  **Settings → Branding**, or the Marineris ones), and follows changes right
+  away. Authelia reads PNG (JPEG and GIF are converted); an SVG or WebP logo
+  shows the default one there.
+
+### Fixed
+
+- **Passkey sign-in:** Authelia now requires passkeys to be discoverable,
+  which sign-in without a username needs. A passkey saved otherwise was
+  refused ("failed to initiate security key sign in").
+- **Account:** password managers (such as Proton Pass) no longer offer to fill
+  a one-time code into the passkey name field, or into the code of a new
+  authenticator.
+- **Demo:** `demo.sh down` reminds that passkeys saved for the demo stop
+  working once it is deleted.
+
 ## [0.1.6] - 2026-10-28
 
 Single sign-on: sign in once, on the Authelia portal or on any protected
@@ -295,7 +323,8 @@ First public version: Phase 1.
   the real stack with a test ACME CA, gitleaks, govulncheck, Trivy, CodeQL,
   OWASP ZAP; multi-arch signed images with SBOM and provenance.
 
-[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.3...v0.1.4
