@@ -215,7 +215,7 @@ func (m Mount) shortSyntax() (string, error) {
 			return "", fmt.Errorf("mounts: invalid volume name %q", src)
 		}
 	case "bind":
-		if !(strings.HasPrefix(src, "/") || strings.HasPrefix(src, "./") || strings.HasPrefix(src, "../") || src == ".") {
+		if !strings.HasPrefix(src, "/") && !strings.HasPrefix(src, "./") && !strings.HasPrefix(src, "../") && src != "." {
 			return "", fmt.Errorf("mounts: the host path %q must be absolute (/srv/…) or relative to the stack (./data)", src)
 		}
 	default:
