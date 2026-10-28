@@ -18,6 +18,16 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+### Changed
+
+- **CI: image jobs back on GitHub's runners.** Measured on the first runs:
+  the self-hosted runners match GitHub's speed on tests and scans, but image
+  builds were slower there (GitHub's build cache is next to GitHub's
+  runners), and pull requests waited for a free runner behind them. Image
+  builds, publishing and the image tests run on GitHub's runners again; the
+  self-hosted runners keep their own Go and npm caches instead of
+  downloading GitHub's.
+
 ## [0.1.8] - 2026-10-28
 
 Passkeys are added where they sign you in.

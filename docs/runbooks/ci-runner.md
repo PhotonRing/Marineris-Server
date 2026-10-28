@@ -1,13 +1,22 @@
 # Self-hosted CI runner
 
-The workflows run on the project's self-hosted runner (label `self-hosted`),
-with two exceptions that stay on GitHub's runners:
+The test and scan jobs run on the project's self-hosted runners (label
+`self-hosted`): unit tests, browser tests, ZAP, CodeQL, lint, dependency and
+secret scans, and the release's small steps. GitHub's runners keep:
 
 - **pull requests from forks**: anyone can open one, and its code would run
   on your server;
-- **the integration test**: it starts the stack under the names, ports
-  (80/443) and volumes of a real installation and deletes it afterwards, so it
-  would replace a Marineris running on the same server.
+- **the image jobs**: building (CI) and publishing (release) the images, and
+  the jobs that test them (Trivy, real Caddy and Authelia, integration).
+  Image builds use GitHub's build cache, which is next to GitHub's runners:
+  on the self-hosted runner, a build took 4–6 min instead of 3, and the
+  multi-architecture release 11 min instead of 8. The integration test also
+  starts the stack under the names, ports (80/443) and volumes of a real
+  installation and deletes it afterwards: it would replace a Marineris
+  running on the same server.
+
+On the self-hosted runners, the jobs do not use GitHub's Go and npm caches:
+the runner keeps its own on disk, so a job does not download them again.
 
 ## What the runner machine needs
 
@@ -61,5 +70,6 @@ design (each one continues the previous one's state).
 - In **Settings → Actions → General**, keep *Require approval for all
   outside collaborators* (fork pull requests run on GitHub's runners anyway).
 
-**Verify:** a pull request from a branch of this repository shows its jobs
-running on your runner (job log: *Runner name*), except *Integration*.
+**Verify:** a pull request from a branch of this repository shows its test
+and scan jobs running on your runners (job log: *Runner name*), and *Build
+images*, *Trivy*, *Generated configs* and *Integration* on GitHub's.

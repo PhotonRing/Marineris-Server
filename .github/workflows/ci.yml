@@ -10,10 +10,11 @@ name: CI
 # The images are built once, in the "images" job, and shared with the jobs
 # that test them. Multi-arch images are built by the release workflow only.
 
-# Runners: jobs run on the project's self-hosted runner, except for pull
-# requests from forks (anyone's code: GitHub's runners) and the integration
-# test (it runs the stack under its real names and ports, which would clash
-# with a Marineris installed on the runner's server). See
+# Runners: the test and scan jobs run on the project's self-hosted runners,
+# except for pull requests from forks (anyone's code: GitHub's runners). The
+# image jobs (build, Trivy, real tools, integration) always run on GitHub's
+# runners: the build cache is next to them, and the integration test takes
+# the names, ports and volumes of a real installation. See
 # docs/runbooks/ci-runner.md.
 
 on:
@@ -81,6 +82,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       - name: golangci-lint (incl. gosec)
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
@@ -111,7 +114,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: web/package-lock.json
       - name: Web UI type check
         working-directory: web
@@ -132,6 +135,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       # Installed from source through the Go checksum database rather than a
       # third-party action.
       - run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
@@ -150,6 +155,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       # One run gives the results, the race detector and the coverage gate.
       # Fuzz targets run their seed corpus here; real fuzzing runs weekly.
       - name: go test -race (includes the API access matrix and golden route table) + coverage gate
@@ -170,6 +177,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       - run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
       - name: govulncheck (reachable vulnerabilities in Go code and dependencies)
         run: govulncheck ./...
@@ -202,6 +211,8 @@ jobs:
         if: matrix.language == 'go'
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
@@ -224,6 +235,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -268,6 +281,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -312,7 +327,9 @@ jobs:
     name: Build images
     needs: changes
     if: needs.changes.outputs.images == 'true'
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
+    # GitHub's runners: the build cache (type=gha) is next to them; over the internet
+    # from the self-hosted runner, builds took 4-6 min instead of 3.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -366,6 +383,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: images
@@ -387,7 +406,8 @@ jobs:
     name: Generated configs vs. real Caddy & Authelia
     needs: [changes, images]
     if: needs.changes.outputs.go == 'true' || needs.changes.outputs.caddy == 'true'
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
+    # Next to the images job: they start as soon as the images are ready.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -396,6 +416,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: images
@@ -411,7 +433,8 @@ jobs:
   trivy:
     name: Image & configuration scan (Trivy)
     needs: [changes, images]
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
+    # Next to the images job: they start as soon as the images are ready.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -454,6 +477,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # A self-hosted runner keeps its module and build caches on disk.
+          cache: ${{ runner.environment == 'github-hosted' }}
       - name: Fuzz every target for 4 minutes
         run: |
           for t in $(grep -rho 'func Fuzz[A-Za-z]*' --include=*_test.go internal | sed 's/func //' | sort -u); do
