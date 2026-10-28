@@ -201,6 +201,10 @@ CREATE TABLE images (
 	PRIMARY KEY (kind, key)
 );
 `,
+	// 4: a route's hub icon can link to a stack's or a service's icon
+	`
+ALTER TABLE routes ADD COLUMN hub_icon_link TEXT NOT NULL DEFAULT '';
+`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

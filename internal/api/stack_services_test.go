@@ -146,30 +146,91 @@ func TestStackRenameAndRouteIcons(t *testing.T) {
 		"target": map[string]any{"container": "media-jellyfin-1", "port": 8096}, "auth": "none", "enabled": true})
 	routeID := int64(rt.Body["id"].(float64))
 
-	// Icons a route can reuse: the stack's (its main service) and the service's.
+	iconURL := func(id int64) string {
+		t.Helper()
+		for _, r := range must("GET", "/api/routes", nil).array() {
+			if int64(r["id"].(float64)) == id {
+				return r["icon"].(string)
+			}
+		}
+		t.Fatalf("route %d not listed", id)
+		return ""
+	}
+	served := func(id int64) string {
+		t.Helper()
+		r := admin.do("GET", fmt.Sprintf("/api/hub/icons/%d", id), nil)
+		if r.Status != http.StatusOK {
+			return ""
+		}
+		return string(r.Raw)
+	}
+
+	// Automatic: a route to a stack's container shows its service's icon,
+	// without a copy of its own.
+	if rt.Body["hub"].(map[string]any)["has_icon"] != false || iconURL(routeID) == "" || served(routeID) == "" {
+		t.Fatalf("automatic icon: %s %q", rt.Raw, iconURL(routeID))
+	}
+	// It follows the service: a new service icon changes the route's.
+	before := iconURL(routeID)
+	must("PUT", "/api/stacks/media/icons/jellyfin", map[string]string{"data": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4="})
+	if iconURL(routeID) == before || !strings.Contains(served(routeID), "<svg") {
+		t.Fatal("the route does not follow its service's icon")
+	}
+	// An icon of its own replaces it; removing it goes back to the service's.
+	must("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"data": pngPixel})
+	if strings.Contains(served(routeID), "<svg") {
+		t.Fatal("the route's own icon is not used")
+	}
+	must("DELETE", fmt.Sprintf("/api/routes/%d/icon", routeID), nil)
+	if !strings.Contains(served(routeID), "<svg") {
+		t.Fatal("back to automatic: the service's icon is not used")
+	}
+
+	// Explicit links: to a stack (its main service) or a service, checked.
 	icons := must("GET", "/api/stack-icons", nil)
-	if !strings.Contains(string(icons.Raw), `"stack":"media","service":"jellyfin"`) {
-		t.Fatalf("stack icons: %s", icons.Raw)
+	if !strings.Contains(string(icons.Raw), `"stack":"media","service":"jellyfin"`) || strings.Contains(string(icons.Raw), `"service":"helper"`) {
+		t.Fatalf("stack icons (services with an icon of their own): %s", icons.Raw)
 	}
-	if r := admin.do("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "helper"}); r.Status != http.StatusBadRequest {
-		t.Fatalf("service without an icon: %d %s", r.Status, r.Raw)
+	for _, bad := range []map[string]string{{"stack": "media", "service": "nope"}, {"stack": "nope"}} {
+		if r := admin.do("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), bad); r.Status != http.StatusBadRequest {
+			t.Fatalf("link to %v: %d %s", bad, r.Status, r.Raw)
+		}
 	}
-	if r := admin.do("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "nope"}); r.Status != http.StatusBadRequest {
-		t.Fatalf("unknown service: %d %s", r.Status, r.Raw)
+	other := must("POST", "/api/routes", map[string]any{"name": "web", "host": "web.example.com", "kind": "container",
+		"target": map[string]any{"container": "web", "port": 80}, "auth": "none", "enabled": true})
+	otherID := int64(other.Body["id"].(float64))
+	if iconURL(otherID) != "" {
+		t.Fatal("a route to a container outside the stacks has no icon by default")
 	}
-	must("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "jellyfin"})
-	if r := must("GET", fmt.Sprintf("/api/hub/icons/%d", routeID), nil); r.Header.Get("Content-Type") != "image/png" {
-		t.Fatalf("route icon copied from the service: %v", r.Header)
+	must("PUT", fmt.Sprintf("/api/routes/%d/icon", otherID), map[string]string{"stack": "media", "service": "jellyfin"})
+	if !strings.Contains(served(otherID), "<svg") {
+		t.Fatal("linked icon not served")
 	}
-	// A service whose icon comes from its route is offered too, and copied.
+
+	// 0.1.3 migration: a route's own icon moves to its service when the
+	// service has none, and the route follows it.
 	helper := must("POST", "/api/routes", map[string]any{"name": "helper", "host": "helper.example.com", "kind": "container",
 		"target": map[string]any{"container": "media-helper-1", "port": 80}, "auth": "none", "enabled": true})
 	helperID := int64(helper.Body["id"].(float64))
 	must("PUT", fmt.Sprintf("/api/routes/%d/icon", helperID), map[string]string{"data": pngPixel})
-	if icons := must("GET", "/api/stack-icons", nil); !strings.Contains(string(icons.Raw), `"stack":"media","service":"helper"`) {
-		t.Fatalf("a service with its route's icon is not offered: %s", icons.Raw)
+	if done, err := e.srv.MoveRouteIconsToServices(t.Context()); err != nil || !done {
+		t.Fatalf("migration: %v %v", done, err)
 	}
-	must("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "helper"})
+	if _, err := e.store.GetImage(t.Context(), "service", "media/helper"); err != nil {
+		t.Fatal("the route icon did not move to its service")
+	}
+	if r, _ := e.store.GetRoute(t.Context(), helperID); r.Hub.HasIcon || served(helperID) == "" {
+		t.Fatal("the route still has its own copy, or shows nothing")
+	}
+	// A route whose service already had an icon keeps its own.
+	must("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"data": pngPixel})
+	if done, _ := e.srv.MoveRouteIconsToServices(t.Context()); !done {
+		t.Fatal("the migration runs once")
+	}
+	if r, _ := e.store.GetRoute(t.Context(), routeID); !r.Hub.HasIcon {
+		t.Fatal("a deliberate route icon was removed")
+	}
+	must("PUT", fmt.Sprintf("/api/routes/%d/icon", otherID), map[string]string{"stack": "media"})
 
 	// Rename: refused names and conflicts first.
 	must("POST", "/api/stacks", map[string]any{"name": "other", "compose": testCompose})
@@ -190,6 +251,9 @@ func TestStackRenameAndRouteIcons(t *testing.T) {
 	}
 	if _, err := e.store.GetImage(t.Context(), "service", "films/jellyfin"); err != nil {
 		t.Fatal("the service icon did not follow the rename")
+	}
+	if r, _ := e.store.GetRoute(t.Context(), otherID); r.Hub.IconLink != "films" {
+		t.Fatalf("the route icon link did not follow the rename: %q", r.Hub.IconLink)
 	}
 	routes := must("GET", "/api/routes", nil)
 	if !strings.Contains(string(routes.Raw), `"container":"films-jellyfin-1"`) {

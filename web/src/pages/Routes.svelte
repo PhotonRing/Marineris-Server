@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { get, post, put, del, describe, iconURL } from '../lib/api.js';
+  import { get, post, put, del, describe } from '../lib/api.js';
   import { toast } from '../lib/state.svelte.js';
   import { link } from '../lib/router.js';
   import Modal from '../components/Modal.svelte';
@@ -38,7 +38,9 @@
       hub_title: '',
       hub_subtitle: '',
       has_icon: false,
-      icon_mode: 'keep', // keep | stack | name | url | upload | remove
+      icon: '', // resolved icon URL (own, linked or automatic)
+      icon_link: '', // "stack" or "stack/service" the icon follows
+      icon_mode: 'keep', // keep | auto | stack | name | url | upload
       icon_stack: '', // "stack" or "stack/service" (icon_mode stack)
       icon_name: '',
       icon_url: '',
@@ -65,6 +67,13 @@
   let loaded = $state(false);
   const iconKey = (i) => (i.service ? `${i.stack}/${i.service}` : i.stack);
   let stackIconPreview = $derived(stackIcons.find((i) => iconKey(i) === form.icon_stack)?.icon || '');
+  // The service of the chosen container, when it belongs to a stack.
+  let service = $derived(form.kind === 'container' && selected?.stack ? `${selected.stack} › ${selected.service}` : '');
+  let serviceIcon = $derived(selected?.stack ? stackIcons.find((i) => i.stack === selected.stack && i.service === selected.service)?.icon || '' : '');
+  const linkText = (l) => (l.includes('/') ? l.replace('/', ' › ') : `${l} (stack)`);
+  let iconSource = $derived(
+    form.has_icon ? 'its own icon' : form.icon_link ? `the icon of ${linkText(form.icon_link)}` : service ? `the icon of its service, ${service}` : '',
+  );
 
   function pickContainer(e) {
     form.container = e.currentTarget.value;
@@ -75,12 +84,9 @@
       form.port = c.ports.find((p) => preferred.includes(p)) || c.ports[0];
     }
     if (!form.name) form.name = form.container;
-    // A container of a stack service with an icon: use the same one.
-    const same = c && stackIcons.find((i) => i.stack === c.stack && i.service === c.service);
-    if (same && !form.has_icon && (form.icon_mode === 'keep' || form.icon_mode === 'name')) {
-      form.icon_mode = 'stack';
-      form.icon_stack = iconKey(same);
-    } else if (c && !form.has_icon && form.icon_mode === 'keep') {
+    // A stack's container shows its service's icon automatically; other
+    // containers get a dashboard-icons suggestion.
+    if (c && !c.stack && !form.has_icon && form.icon_mode === 'keep') {
       const slug = suggestSlug(c.image);
       if (slug) {
         form.icon_mode = 'name';
@@ -115,7 +121,7 @@
     if (form.icon_mode === 'name' && form.icon_name.trim()) return put(`/api/routes/${id}/icon`, { name: form.icon_name.trim() });
     if (form.icon_mode === 'url' && form.icon_url.trim()) return put(`/api/routes/${id}/icon`, { url: form.icon_url.trim() });
     if (form.icon_mode === 'upload' && form.icon_data) return put(`/api/routes/${id}/icon`, { data: form.icon_data });
-    if (form.icon_mode === 'remove' && form.has_icon) return del(`/api/routes/${id}/icon`);
+    if (form.icon_mode === 'auto' && (form.has_icon || form.icon_link)) return del(`/api/routes/${id}/icon`);
   }
 
   function create() {
@@ -151,6 +157,8 @@
       hub_title: r.hub.title,
       hub_subtitle: r.hub.subtitle,
       has_icon: r.hub.has_icon,
+      icon_link: r.hub.icon_link,
+      icon: r.icon,
     };
     formError = '';
     open = true;
@@ -195,9 +203,10 @@
       } catch (err) {
         toast(`Route saved, but the icon could not be set: ${describe(err)}`, 'error');
       }
+      // Reload before closing, so reopening a route shows what was saved.
+      await load();
       toast(`Route ${form.name} saved and applied`);
       open = false;
-      await load();
     } catch (err) {
       formError = describe(err);
     } finally {
@@ -368,14 +377,15 @@
       <div class="field">
         <label for="hbi">Icon</label>
         <div class="row">
-          {#if form.has_icon && form.id}<img class="tile-icon" src={iconURL(form.id)} alt="Current icon" />{/if}
+          {#if form.icon_mode === 'keep' && (form.icon || (!form.id && serviceIcon))}<img class="tile-icon" src={form.icon || serviceIcon} alt="Current icon" />{/if}
+          {#if form.icon_mode === 'auto' && serviceIcon}<img class="tile-icon" src={serviceIcon} alt="" />{/if}
           <select id="hbi" bind:value={form.icon_mode}>
-            <option value="keep">{form.has_icon ? 'Keep the current icon' : 'Initials (no icon)'}</option>
-            {#if stackIcons.length}<option value="stack">Same as a stack or service</option>{/if}
+            <option value="keep">{form.id ? (iconSource ? `Keep: ${iconSource}` : 'Keep: initials (no icon)') : service ? `The icon of its service, ${service}` : 'Initials (no icon)'}</option>
+            {#if form.has_icon || form.icon_link}<option value="auto">{service ? `The icon of its service, ${service}` : 'Initials (no icon of its own)'}</option>{/if}
+            {#if stackIcons.length}<option value="stack">The icon of another stack or service</option>{/if}
             <option value="name">By name (dashboard-icons)</option>
             <option value="url">From an https:// URL</option>
             <option value="upload">Upload a file</option>
-            {#if form.has_icon}<option value="remove">Remove the icon</option>{/if}
           </select>
         </div>
         {#if form.icon_mode === 'stack'}
@@ -387,7 +397,7 @@
             </select>
             {#if stackIconPreview}<img class="tile-icon" src={stackIconPreview} alt="" />{/if}
           </div>
-          <div class="help">The icon is copied: changing the service's icon later does not change the route's.</div>
+          <div class="help">The route follows that icon: changing it on the stack page changes it here too.</div>
         {:else if form.icon_mode === 'name'}
           <input class="mt" bind:value={form.icon_name} placeholder="jellyfin" />
           <div class="help">Name from the dashboard-icons collection (e.g. jellyfin, nextcloud, home-assistant). Marineris downloads it once and serves it itself.</div>
@@ -396,6 +406,9 @@
         {:else if form.icon_mode === 'upload'}
           <input class="mt" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon" onchange={pickFile} />
           <div class="help">PNG, JPEG, WebP, GIF, ICO or SVG, up to 512 KB.</div>
+        {/if}
+        {#if ['name', 'url', 'upload'].includes(form.icon_mode) && service}
+          <div class="help">This icon is the route's only. To change the app's icon everywhere, set it on the service (stack page → Icon).</div>
         {/if}
       </div>
     {/if}

@@ -99,12 +99,30 @@ function stats() {
   };
 }
 
+// A route's icon: its own, else the stack or service it links to, else (a
+// route to a stack's container) its service's (internal/api/hub.go).
+function routeIcon(r) {
+  if (db.icons.has(r.id)) return db.icons.get(r.id);
+  let link = r.hub.icon_link || '';
+  if (!link && r.kind === 'container') {
+    const c = db.containers.find((x) => x.name === r.target.container && x.stack && x.service);
+    if (c) link = `${c.stack}/${c.service}`;
+  }
+  if (!link) return '';
+  if (!link.includes('/')) {
+    const s = db.stacks.find((x) => x.name === link);
+    if (!s) return '';
+    link = `${link}/${stackServices(s).main}`;
+  }
+  return db.serviceIcons.get(link) || '';
+}
+
 function hub() {
   return {
     title: db.settings.hub_title, widgets: db.settings.hub_widgets, background: db.settings.hub_background,
     tiles: db.routes
       .filter((r) => r.enabled && r.hub.visible)
-      .map((r) => ({ id: r.id, title: r.hub.title || r.name, subtitle: r.hub.subtitle, url: `https://${r.host}${r.path_prefix || ''}/`, auth: r.auth, ...(db.icons.has(r.id) ? { icon: db.icons.get(r.id) } : {}) }))
+      .map((r) => ({ id: r.id, title: r.hub.title || r.name, subtitle: r.hub.subtitle, url: `https://${r.host}${r.path_prefix || ''}/`, auth: r.auth, ...(routeIcon(r) ? { icon: routeIcon(r) } : {}) }))
       .sort((a, b) => a.title.localeCompare(b.title)),
   };
 }
@@ -178,12 +196,11 @@ function stackServices(s) {
   let routed = '';
   const services = defs.map((d) => {
     const containers = db.containers.filter((c) => c.stack === s.name && c.service === d.name);
-    let icon = db.serviceIcons.get(`${s.name}/${d.name}`) || '';
-    const source = icon ? 'custom' : '';
+    // Services own their icons; routes follow them (never the opposite).
+    const icon = db.serviceIcons.get(`${s.name}/${d.name}`) || '';
     const route = db.routes.find((r) => r.kind === 'container' && containers.some((c) => c.name === r.target.container));
     if (route && !routed) routed = d.name;
-    if (!icon && route && db.icons.has(route.id)) icon = db.icons.get(route.id);
-    return { ...d, icon, icon_source: source || (icon ? 'route' : ''), state: containersState(containers), containers };
+    return { ...d, icon, icon_source: icon ? 'custom' : '', state: containersState(containers), containers };
   });
   const main = defs.find((d) => d.labels.some((l) => l.key === 'io.marineris.main' && l.value === 'true'))?.name || routed || defs[0]?.name || '';
   for (const v of services) v.main = v.name === main;
@@ -327,11 +344,13 @@ const routes = [
     if (!r) return notFound();
     let url = '';
     if (b.stack) {
+      // A link: the route follows that icon, and drops its own.
       const s = db.stacks.find((x) => x.name === b.stack);
-      if (!s) return notFound();
-      const sum = stackServices(s);
-      url = sum.services.find((v) => v.name === (b.service || sum.main))?.icon;
-      if (!url) return fail(400, 'invalid', 'stack: this stack or service has no icon', { field: 'stack' });
+      if (!s) return fail(400, 'invalid', 'stack: no such stack', { field: 'stack' });
+      if (b.service && !parseServices(s.compose).some((d) => d.name === b.service)) return fail(400, 'invalid', 'service: no such service in this stack', { field: 'service' });
+      db.icons.delete(r.id);
+      Object.assign(r.hub, { has_icon: false, icon_link: b.service ? `${s.name}/${b.service}` : s.name });
+      return ok({ ok: true, link: r.hub.icon_link });
     } else if (b.name) {
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(b.name)) return fail(400, 'bad_request', "icons: an icon name uses lowercase letters, digits and '-'");
       url = `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${b.name}.png`;
@@ -342,10 +361,10 @@ const routes = [
       url = `data:${b.data.startsWith('PHN2') || b.data.startsWith('PD94') ? 'image/svg+xml' : 'image/png'};base64,${b.data}`;
     } else return fail(400, 'bad_request', 'give an icon name, url or data');
     db.icons.set(r.id, url);
-    r.hub.has_icon = true;
+    Object.assign(r.hub, { has_icon: true, icon_link: '' });
     return ok({ ok: true, content_type: 'image/png' });
   }],
-  ['DELETE', '/api/routes/{id}/icon', (p) => { db.icons.delete(+p.id); const r = db.routes.find((x) => x.id === +p.id); if (r) r.hub.has_icon = false; return ok({ ok: true }); }],
+  ['DELETE', '/api/routes/{id}/icon', (p) => { db.icons.delete(+p.id); const r = db.routes.find((x) => x.id === +p.id); if (r) Object.assign(r.hub, { has_icon: false, icon_link: '' }); return ok({ ok: true }); }],
 
   ['GET', '/api/overview', () => ok(overview())],
   ['GET', '/api/settings', () => ok(db.settings)],
@@ -431,11 +450,11 @@ const routes = [
   }],
   ['GET', '/api/certificates', () => ok(certificates())],
 
-  ['GET', '/api/routes', () => ok(db.routes)],
+  ['GET', '/api/routes', () => ok(db.routes.map((r) => ({ ...r, icon: routeIcon(r) })))],
   ['POST', '/api/routes', (p, b) => {
     const err = validateRoute(b, 0);
     if (err) return err;
-    const r = { id: nextId++, name: b.name, host: b.host, path_prefix: b.path_prefix || '', kind: b.kind, target: b.target, auth: b.auth, rate_limit: b.rate_limit ?? null, enabled: b.enabled !== false, created_at: iso(), updated_at: iso(), hub: { visible: true, title: '', subtitle: '', ...(b.hub || {}), has_icon: false } };
+    const r = { id: nextId++, name: b.name, host: b.host, path_prefix: b.path_prefix || '', kind: b.kind, target: b.target, auth: b.auth, rate_limit: b.rate_limit ?? null, enabled: b.enabled !== false, created_at: iso(), updated_at: iso(), hub: { visible: true, title: '', subtitle: '', ...(b.hub || {}), has_icon: false, icon_link: '' } };
     db.routes.push(r);
     applied(`route ${r.name} added`, r.auth !== 'none' ? ['caddy', 'authelia'] : ['caddy']);
     audit('route.create', r.name, r.host);
@@ -447,7 +466,7 @@ const routes = [
     const err = validateRoute(b, r.id);
     if (err) return err;
     Object.assign(r, { name: b.name, host: b.host, path_prefix: b.path_prefix || '', kind: b.kind, target: b.target, auth: b.auth, rate_limit: b.rate_limit ?? null, enabled: b.enabled !== false, updated_at: iso() });
-    if (b.hub) r.hub = { ...r.hub, ...b.hub, has_icon: r.hub.has_icon };
+    if (b.hub) r.hub = { ...r.hub, ...b.hub, has_icon: r.hub.has_icon, icon_link: r.hub.icon_link };
     applied(`route ${r.name} updated`, ['caddy', 'authelia']);
     audit('route.update', r.name, r.host);
     return ok(r);
@@ -526,6 +545,7 @@ const routes = [
     for (const [k, v] of [...db.serviceIcons]) if (k.startsWith(`${from}/`)) { db.serviceIcons.delete(k); db.serviceIcons.set(to + k.slice(from.length), v); }
     for (const v of db.volumes) if (v.stack === from) v.stack = to;
     s.name = to;
+    for (const r of db.routes) if (r.hub.icon_link === from || r.hub.icon_link?.startsWith(`${from}/`)) r.hub.icon_link = to + r.hub.icon_link.slice(from.length);
     audit('stack.rename', from, `renamed to ${to}`);
     return ok({ name: to });
   }],
@@ -653,8 +673,4 @@ export async function handle(method, url, body) {
     return r.fn(params, body || {}, new URLSearchParams(qs));
   }
   return notFound();
-}
-
-export function iconURL(id) {
-  return db.icons.get(+id) || '';
 }

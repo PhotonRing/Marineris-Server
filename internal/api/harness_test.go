@@ -236,6 +236,13 @@ func (c *client) do(method, path string, body any) resp {
 	return out
 }
 
+// array decodes a JSON array response.
+func (r resp) array() []map[string]any {
+	var out []map[string]any
+	_ = json.Unmarshal(r.Raw, &out)
+	return out
+}
+
 func (r resp) code() string {
 	s, _ := r.Body["code"].(string)
 	return s

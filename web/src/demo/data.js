@@ -47,11 +47,11 @@ export function seed() {
   ];
   const route = (rid, name, host, kind, target, auth, hub, minutes) => ({
     id: rid, name, host, path_prefix: '', kind, target, auth, rate_limit: null, enabled: true,
-    created_at: ago(minutes), updated_at: ago(minutes), hub: { has_icon: false, ...hub },
+    created_at: ago(minutes), updated_at: ago(minutes), hub: { has_icon: false, icon_link: '', ...hub },
   });
   const routes = [
-    route(1, 'jellyfin', 'media.mars.example', 'container', { container: 'jellyfin', port: 8096 }, 'none', { visible: true, title: 'Jellyfin', subtitle: 'Films and series', has_icon: true }, 2900),
-    route(2, 'status', 'status.mars.example', 'container', { container: 'uptime-kuma', port: 3001 }, 'authelia', { visible: true, title: 'Uptime Kuma', subtitle: 'Service monitoring', has_icon: true }, 2800),
+    route(1, 'jellyfin', 'media.mars.example', 'container', { container: 'jellyfin', port: 8096 }, 'none', { visible: true, title: 'Jellyfin', subtitle: 'Films and series' }, 2900),
+    route(2, 'status', 'status.mars.example', 'container', { container: 'uptime-kuma', port: 3001 }, 'authelia', { visible: true, title: 'Uptime Kuma', subtitle: 'Service monitoring' }, 2800),
     route(3, 'nas', 'nas.mars.example', 'external', { url: 'http://192.168.1.20:5000' }, 'admins', { visible: true, title: 'NAS', subtitle: 'Synology DSM on the LAN' }, 2000),
     route(4, 'docs', 'docs.valles.example', 'static', { folder: 'docs' }, 'none', { visible: true, title: 'Documentation', subtitle: 'Static site' }, 1500),
   ];
@@ -82,11 +82,13 @@ export function seed() {
       { id: 2, name: 'valles.example', dns_profile_id: null, wildcard: false, created_at: ago(1600), updated_at: ago(1600) },
     ],
     routes,
-    serviceIcons: new Map([['media/jellyseerr', REQUESTS_ICON]]),
-    icons: new Map([
-      [1, MEDIA_ICON],
-      [2, MONITOR_ICON],
+    // Services own their icons; the routes to them follow (no copy).
+    serviceIcons: new Map([
+      ['media/jellyfin', MEDIA_ICON],
+      ['media/jellyseerr', REQUESTS_ICON],
+      ['monitoring/uptime-kuma', MONITOR_ICON],
     ]),
+    icons: new Map(), // routes' own icons
     containers,
     stacks: [
       {

@@ -20,15 +20,33 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [0.1.3] - 2026-10-28
 
+Icons belong to your apps, not to their routes.
+
 **Upgrading from 0.1.2:** in `.env`, set `MARINERIS_IMAGE` and
 `MARINERIS_CADDY_IMAGE` to the `0.1.3` tags, then
-`docker compose pull && docker compose up -d`.
+`docker compose pull && docker compose up -d`. On its first start,
+Marineris moves the icon of each route to a stack's container onto that
+service when the service has none, and the route then follows it (routes
+whose service already has an icon keep theirs).
+
+### Changed
+
+- **Services and stacks own their icons; routes follow them.** A route to a
+  stack's container shows its service's icon automatically, and a route can
+  follow the icon of any other stack or service. Changing a service's icon
+  changes the icon of every route that follows it. A route stores an icon of
+  its own only when you give it one (dashboard-icons name, URL or file), and
+  going back to the service's icon is one choice in its Icon menu.
+- Services no longer show the icon of the route that publishes them.
 
 ### Fixed
 
-- Route icon → "Same as a stack or service" only offered services with an
-  icon of their own. Services whose icon comes from the route that publishes
-  them (and their stack, when it is the main service) are offered too.
+- Route icon → "The icon of another stack or service" only offered services
+  with an icon of their own stored on the service (jellyfin was missing in
+  the demo); every stack and service with an icon is offered.
+- Replacing a route's icon lost the app's original icon for good, since it
+  only existed in the route.
+- Reopening a route right after saving it showed its previous settings.
 
 ## [0.1.2] - 2026-10-28
 

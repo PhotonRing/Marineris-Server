@@ -58,8 +58,7 @@ type serviceView struct {
 	stacks.Service
 	Main       bool               `json:"main"`
 	Icon       string             `json:"icon"`
-	IconSource string             `json:"icon_source"` // "", "custom" or "route"
-	iconRoute  int64              // the route whose icon it is (IconSource "route")
+	IconSource string             `json:"icon_source"` // "" or "custom"
 	State      string             `json:"state"`
 	Containers []docker.Container `json:"containers"`
 }
@@ -99,15 +98,13 @@ func (s *Server) stackServices(ctx context.Context, st *store.Stack, containers 
 	if err != nil {
 		return sum, err
 	}
-	routeOf := map[string]*store.Route{} // container name → route
+	routed := map[string]bool{} // containers published by a route
 	for _, rt := range routes {
 		if rt.Kind == store.RouteContainer {
-			if prev, ok := routeOf[rt.Target.Container]; !ok || !prev.Hub.HasIcon && rt.Hub.HasIcon {
-				routeOf[rt.Target.Container] = rt
-			}
+			routed[rt.Target.Container] = true
 		}
 	}
-	routed := ""
+	firstRouted := ""
 	for _, def := range defs {
 		v := serviceView{Service: def, Containers: []docker.Container{}}
 		for _, c := range containers {
@@ -122,14 +119,8 @@ func (s *Server) stackServices(ctx context.Context, st *store.Stack, containers 
 			v.IconSource = "custom"
 		}
 		for _, c := range v.Containers {
-			if rt, ok := routeOf[c.Name]; ok {
-				if routed == "" {
-					routed = def.Name
-				}
-				if v.Icon == "" && rt.Hub.HasIcon {
-					v.Icon = "/api/hub/icons/" + strconv.FormatInt(rt.ID, 10) + "?v=" + strconv.FormatInt(rt.UpdatedAt.Unix(), 10)
-					v.IconSource, v.iconRoute = "route", rt.ID
-				}
+			if routed[c.Name] && firstRouted == "" {
+				firstRouted = def.Name
 			}
 		}
 		if def.Main() && sum.Main == "" {
@@ -138,7 +129,7 @@ func (s *Server) stackServices(ctx context.Context, st *store.Stack, containers 
 		sum.Services = append(sum.Services, v)
 	}
 	if sum.Main == "" {
-		sum.Main = routed
+		sum.Main = firstRouted
 	}
 	if sum.Main == "" && len(defs) > 0 {
 		sum.Main = defs[0].Name
@@ -578,6 +569,16 @@ func (s *Server) handleStackRename(w http.ResponseWriter, r *http.Request, rc *r
 		s.Log.Warn("removing the old stack folder failed", "stack", oldName, "err", err)
 	}
 	s.audit(r, rc, "stack.rename", oldName, true, "renamed to "+newName)
+	// Route icons linked to the stack or its services follow it.
+	if links, err := s.Store.ListRoutes(ctx); err == nil {
+		for _, rt := range links {
+			if l := rt.Hub.IconLink; l == oldName || strings.HasPrefix(l, oldName+"/") {
+				if err := s.Store.SetRouteIconLink(ctx, rt.ID, newName+strings.TrimPrefix(l, oldName)); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	if !deployed {
 		return ok(w, map[string]string{"name": newName})
 	}
@@ -666,8 +667,8 @@ type stackIcon struct {
 	Icon    string `json:"icon"`
 }
 
-// handleStackIcons lists the icons of the stacks and their services, their
-// own or the one of the route that publishes them.
+// handleStackIcons lists the icons a route can link to: those of the
+// services, and of the stacks (their main service's).
 func (s *Server) handleStackIcons(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
 	ctx := r.Context()
 	list, err := s.Store.ListStacks(ctx)
@@ -682,7 +683,7 @@ func (s *Server) handleStackIcons(w http.ResponseWriter, r *http.Request, rc *re
 			continue
 		}
 		for _, v := range sum.Services {
-			if v.Icon == "" {
+			if v.IconSource != "custom" {
 				continue
 			}
 			if v.Main {
@@ -694,35 +695,65 @@ func (s *Server) handleStackIcons(w http.ResponseWriter, r *http.Request, rc *re
 	return ok(w, out)
 }
 
-// serviceIconFor returns the icon of a stack's service (its own, or the one
-// of the route that publishes it), or of its main service when service is
-// empty.
-func (s *Server) serviceIconFor(ctx context.Context, stack, service string) (*store.Image, error) {
-	st, err := s.Store.GetStack(ctx, stack)
+// MoveRouteIconsToServices runs once (Marineris 0.1.3): before, a route kept
+// its own copy of its app's icon and a service without an icon showed its
+// route's. Now services own their icons and routes follow them, so the icon
+// of a route to a stack's container moves to that service when the service
+// has none, and the route follows it. Routes whose service already has an
+// icon keep theirs (a deliberate, different icon). It needs Docker to know
+// which service a container belongs to: when Docker is not reachable yet it
+// does nothing and is tried again later.
+func (s *Server) MoveRouteIconsToServices(ctx context.Context) (bool, error) {
+	const task = "route-icons-to-services"
+	if done, err := s.Store.Done(ctx, task); err != nil || done {
+		return done, err
+	}
+	if s.Docker == nil {
+		return false, nil
+	}
+	cs, err := s.Docker.List(ctx)
 	if err != nil {
-		return nil, err
+		return false, nil //nolint:nilerr // Docker not reachable yet: try later
 	}
-	sum, err := s.stackServices(ctx, st, s.listContainers(ctx))
+	byName := map[string]docker.Container{}
+	for _, c := range cs {
+		byName[c.Name] = c
+	}
+	have, err := s.Store.ImageVersions(ctx, store.ImageService)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	if service == "" {
-		service = sum.Main
+	routes, err := s.Store.ListRoutes(ctx)
+	if err != nil {
+		return false, err
 	}
-	for _, v := range sum.Services {
-		if v.Name != service {
+	for _, rt := range routes {
+		c, ok := byName[rt.Target.Container]
+		if rt.Kind != store.RouteContainer || !rt.Hub.HasIcon || !ok || c.Stack == "" || c.Service == "" {
 			continue
 		}
-		switch v.IconSource {
-		case "custom":
-			return s.Store.GetImage(ctx, store.ImageService, st.Name+"/"+service)
-		case "route":
-			ic, err := s.Store.GetRouteIcon(ctx, v.iconRoute)
-			if err != nil {
-				return nil, err
-			}
-			return &store.Image{ContentType: ic.ContentType, Data: ic.Data}, nil
+		key := c.Stack + "/" + c.Service
+		if _, hasIcon := have[key]; hasIcon {
+			continue
 		}
+		if _, err := s.Store.GetStack(ctx, c.Stack); err != nil {
+			continue // not a stack managed by Marineris
+		}
+		ic, err := s.Store.GetRouteIcon(ctx, rt.ID)
+		if err != nil {
+			return false, err
+		}
+		if err := s.Store.SetImage(ctx, store.ImageService, key, ic.ContentType, ic.Data); err != nil {
+			return false, err
+		}
+		if err := s.Store.DeleteRouteIcon(ctx, rt.ID); err != nil {
+			return false, err
+		}
+		if err := s.Store.SetRouteIconLink(ctx, rt.ID, ""); err != nil {
+			return false, err
+		}
+		have[key] = time.Now()
+		s.Log.Info("route icon moved to its service", "route", rt.Name, "service", key)
 	}
-	return nil, fieldError("stack", "this stack or service has no icon")
+	return true, s.Store.MarkDone(ctx, task)
 }
