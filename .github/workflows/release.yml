@@ -71,7 +71,9 @@ jobs:
   images:
     name: Publish signed images
     needs: [version, checks]
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'self-hosted' || 'ubuntu-24.04' }}
+    # GitHub's runners: the build cache is next to them, and arm64 is emulated
+    # (QEMU) either way; on the self-hosted runner it took 11 min instead of 8.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
