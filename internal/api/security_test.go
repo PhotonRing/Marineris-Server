@@ -56,10 +56,10 @@ func TestRouteTableGolden(t *testing.T) {
 func TestOnlyExpectedRoutesArePublic(t *testing.T) {
 	allowed := map[string]bool{
 		"GET /api/health": true, "GET /api/meta": true,
-		// The login page shows the custom favicon, logo and background.
-		"GET /api/branding/{asset}": true,
 		"POST /api/auth/login": true, "POST /api/auth/login/mfa": true,
 		"POST /api/auth/passkey/begin": true, "POST /api/auth/passkey/finish": true,
+		// The login page shows the custom favicon, logo and background.
+		"GET /api/branding/{asset}": true,
 	}
 	e := newEnv(t)
 	for _, r := range e.srv.Routes() {

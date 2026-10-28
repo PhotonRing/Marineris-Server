@@ -71,6 +71,7 @@ type DockerAPI interface {
 type StacksAPI interface {
 	Check(ctx context.Context, name string, composeYAML, env []byte) ([]stacks.Violation, error)
 	Deploy(ctx context.Context, name string, composeYAML, env []byte, unsafeAck bool) error
+	Recreate(ctx context.Context, name string, composeYAML, env []byte, unsafeAck bool, services []string, pull bool) error
 	Down(ctx context.Context, name string, removeVolumes bool) error
 	Remove(name string) error
 }

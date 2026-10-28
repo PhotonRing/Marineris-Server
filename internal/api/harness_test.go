@@ -72,7 +72,11 @@ func (f *fakeDocker) Action(_ context.Context, ref, action string) error {
 }
 func (f *fakeDocker) Ping(context.Context) error { return nil }
 func (f *fakeDocker) List(context.Context) ([]docker.Container, error) {
-	return []docker.Container{{ID: "abc", Name: "web", State: "running", Ports: []int{80}, Networks: []string{}}}, nil
+	return []docker.Container{
+		{ID: "abc", Name: "web", State: "running", Ports: []int{80}, Networks: []string{}},
+		{ID: "def", Name: "media-jellyfin-1", Stack: "media", Service: "jellyfin", State: "running", Health: "healthy", Ports: []int{8096}, Networks: []string{}},
+		{ID: "ghi", Name: "media-helper-1", Stack: "media", Service: "helper", State: "exited", Ports: []int{}, Networks: []string{}},
+	}, nil
 }
 func (f *fakeDocker) Inspect(_ context.Context, ref string) (*docker.Detail, error) {
 	return &docker.Detail{Container: docker.Container{ID: "abc", Name: ref}}, nil
@@ -88,12 +92,16 @@ func (f *fakeDocker) RemoveVolume(context.Context, string) error       { return 
 
 type fakeStacks struct{}
 
+// Check runs the real loader and policy (no Docker involved).
 func (fakeStacks) Check(ctx context.Context, name string, c, e []byte) ([]stacks.Violation, error) {
-	return stacks.PreScan(c), nil
+	return stacks.NewManager("/srv/marineris-test/stacks", "", []string{"/srv"}, []string{"marineris"}).Check(ctx, name, c, e)
 }
 func (fakeStacks) Deploy(context.Context, string, []byte, []byte, bool) error { return nil }
-func (fakeStacks) Down(context.Context, string, bool) error                   { return nil }
-func (fakeStacks) Remove(string) error                                        { return nil }
+func (fakeStacks) Recreate(context.Context, string, []byte, []byte, bool, []string, bool) error {
+	return nil
+}
+func (fakeStacks) Down(context.Context, string, bool) error { return nil }
+func (fakeStacks) Remove(string) error                      { return nil }
 
 type env struct {
 	t      *testing.T

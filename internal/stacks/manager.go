@@ -177,6 +177,58 @@ func (m *Manager) Deploy(ctx context.Context, name string, composeYAML, env []by
 	})
 }
 
+// Recreate recreates services of a deployed stack (every service when none
+// is given) from its current definition, pulling their images first when
+// pull is set ("update"). Other services are left as they are.
+func (m *Manager) Recreate(ctx context.Context, name string, composeYAML, env []byte, unsafeAck bool, services []string, pull bool) error {
+	project, vs, err := m.Load(ctx, name, composeYAML, env)
+	if err != nil {
+		return err
+	}
+	if blocking := Blocking(vs, unsafeAck); len(blocking) > 0 {
+		return &PolicyError{Violations: blocking}
+	}
+	for _, s := range services {
+		if _, ok := project.Services[s]; !ok {
+			return fmt.Errorf("stack %s has no service %q", name, s)
+		}
+	}
+	if err := m.Write(name, composeYAML, env); err != nil {
+		return err
+	}
+	svc, err := m.compose()
+	if err != nil {
+		return err
+	}
+	if len(services) > 0 {
+		// Compose converges the whole project it is given: narrow it to the
+		// services and their dependencies.
+		if project, err = project.WithSelectedServices(services); err != nil {
+			return err
+		}
+	}
+	if pull {
+		targets := project
+		if len(services) > 0 {
+			if targets, err = project.WithSelectedServices(services, types.IgnoreDependencies); err != nil {
+				return err
+			}
+		}
+		if err := svc.Pull(ctx, targets, api.PullOptions{Quiet: true}); err != nil {
+			return err
+		}
+	}
+	return svc.Up(ctx, project, api.UpOptions{
+		Create: api.CreateOptions{
+			Services:             services,
+			Recreate:             api.RecreateForce,
+			RecreateDependencies: api.RecreateDiverged,
+			QuietPull:            true,
+		},
+		Start: api.StartOptions{Project: project},
+	})
+}
+
 // Down stops and removes a stack's containers and networks. Volumes are kept
 // unless removeVolumes is set.
 func (m *Manager) Down(ctx context.Context, name string, removeVolumes bool) error {

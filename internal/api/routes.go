@@ -121,6 +121,18 @@ func (s *Server) table() []Route {
 		{U, "/api/stacks/{name}", Authed, false, s.handleStackUpdate},
 		{P, "/api/stacks/{name}/deploy", Authed, false, s.handleStackDeploy},
 		{P, "/api/stacks/{name}/down", Authed, false, s.handleStackDown},
+		{P, "/api/stacks/{name}/restart", Authed, false, s.handleStackRestart},
+		{P, "/api/stacks/{name}/pull", Authed, false, s.handleStackPull},
+		{G, "/api/stacks/{name}/services", Authed, false, s.handleStackServices},
+		{U, "/api/stacks/{name}/services/{service}", Authed, false, s.handleServiceUpdate},
+		{P, "/api/stacks/{name}/services/{service}/start", Authed, false, s.handleServiceAction("start")},
+		{P, "/api/stacks/{name}/services/{service}/stop", Authed, false, s.handleServiceAction("stop")},
+		{P, "/api/stacks/{name}/services/{service}/restart", Authed, false, s.handleServiceAction("restart")},
+		{P, "/api/stacks/{name}/services/{service}/recreate", Authed, false, s.handleServiceAction("recreate")},
+		{P, "/api/stacks/{name}/services/{service}/update", Authed, false, s.handleServiceAction("update")},
+		{G, "/api/stacks/{name}/icons/{service}", Authed, false, s.handleServiceIcon},
+		{U, "/api/stacks/{name}/icons/{service}", Authed, false, s.handleServiceIconSet},
+		{D, "/api/stacks/{name}/icons/{service}", Authed, false, s.handleServiceIconDelete},
 		{D, "/api/stacks/{name}", StepUp, false, s.handleStackDelete},
 
 		// Volumes and networks

@@ -146,6 +146,10 @@ func relativeInside(p string) bool {
 	return c != ".." && !strings.HasPrefix(c, "../")
 }
 
+// systemLabel marks the Marineris stack's own containers, volumes and
+// networks (protected from the UI); user stacks may not claim it.
+const systemLabel = "io.marineris.system"
+
 // Check applies the security policy to a loaded project.
 func Check(p *types.Project, pol Policy) []Violation {
 	var out []Violation
@@ -217,10 +221,23 @@ func Check(p *types.Project, pol Policy) []Violation {
 				add(name, "env_file", fmt.Sprintf("env_file %q must be inside the stack directory", ef.Path), false)
 			}
 		}
+		if _, ok := s.Labels[systemLabel]; ok {
+			add(name, "label", "the "+systemLabel+" label is reserved for the containers of Marineris itself", false)
+		}
 		for _, lf := range s.LabelFiles {
 			if !within(lf, pol.StackDir) {
 				add(name, "label_file", fmt.Sprintf("label_file %q must be inside the stack directory", lf), false)
 			}
+		}
+	}
+	for n, v := range p.Volumes {
+		if _, ok := v.Labels[systemLabel]; ok {
+			add("", "label", fmt.Sprintf("volume %q: the %s label is reserved", n, systemLabel), false)
+		}
+	}
+	for n, nw := range p.Networks {
+		if _, ok := nw.Labels[systemLabel]; ok {
+			add("", "label", fmt.Sprintf("network %q: the %s label is reserved", n, systemLabel), false)
 		}
 	}
 	for n, sec := range p.Secrets {

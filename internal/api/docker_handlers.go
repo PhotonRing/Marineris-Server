@@ -142,25 +142,32 @@ func (s *Server) handleStackList(w http.ResponseWriter, r *http.Request, rc *req
 		return err
 	}
 	out := []map[string]any{}
+	cs := s.listContainers(r.Context())
 	running := map[string]int{}
 	total := map[string]int{}
-	if s.Docker != nil {
-		if cs, err := s.Docker.List(r.Context()); err == nil {
-			for _, c := range cs {
-				if c.Stack != "" {
-					total[c.Stack]++
-					if c.State == "running" {
-						running[c.Stack]++
-					}
-				}
+	for _, c := range cs {
+		if c.Stack != "" {
+			total[c.Stack]++
+			if c.State == "running" {
+				running[c.Stack]++
 			}
 		}
 	}
 	for _, st := range list {
-		out = append(out, map[string]any{
+		item := map[string]any{
 			"name": st.Name, "created_at": st.CreatedAt, "updated_at": st.UpdatedAt, "deployed_at": st.DeployedAt,
 			"unsafe_ack": st.UnsafeAck, "containers": total[st.Name], "running": running[st.Name],
-		})
+		}
+		// A stack whose file cannot be read is still listed, without details.
+		if sum, err := s.stackServices(r.Context(), st, cs); err == nil {
+			item["state"], item["main"], item["icon"], item["services"] = sum.State, sum.Main, sum.Icon, len(sum.Services)
+		} else {
+			var ae *Error
+			if !errors.As(err, &ae) {
+				return err
+			}
+		}
+		out = append(out, item)
 	}
 	return ok(w, out)
 }
@@ -310,6 +317,7 @@ func (s *Server) handleStackDeploy(w http.ResponseWriter, r *http.Request, rc *r
 	if err := s.Store.MarkStackDeployed(ctx, st.Name); err != nil {
 		return err
 	}
+	s.fetchServiceIcons(st)
 	return ok(w, map[string]bool{"ok": true})
 }
 
@@ -346,6 +354,9 @@ func (s *Server) handleStackDelete(w http.ResponseWriter, r *http.Request, rc *r
 		return err
 	}
 	if err := s.Store.DeleteStack(ctx, name); err != nil {
+		return err
+	}
+	if err := s.Store.DeleteImagesWithPrefix(ctx, store.ImageService, name+"/"); err != nil {
 		return err
 	}
 	s.audit(r, rc, "stack.delete", name, true, "volumes removed: "+strconv.FormatBool(removeVolumes))
