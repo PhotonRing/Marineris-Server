@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/photonring/marineris-server/internal/caddy"
+)
 
 // Access levels.
 type Access int
@@ -16,10 +20,14 @@ const (
 	// StepUp routes additionally need a recent password+TOTP or passkey
 	// proof (see StepUpWindow).
 	StepUp
+	// Ticket routes are the page that adds an Authelia passkey, on the
+	// portal's host (edge listener only): no session there, a ticket from
+	// a step-up route instead, and requests from a portal host.
+	Ticket
 )
 
 func (a Access) String() string {
-	return [...]string{"public", "setup", "authed", "stepup"}[a]
+	return [...]string{"public", "setup", "authed", "stepup", "ticket"}[a]
 }
 
 // Route is one API endpoint.
@@ -65,6 +73,13 @@ func (s *Server) table() []Route {
 		{P, "/api/account/totp/begin", StepUp, false, s.handleTOTPBegin},
 		{P, "/api/account/totp/finish", StepUp, false, s.handleTOTPFinish},
 		{P, "/api/account/sessions/revoke-others", Authed, false, s.handleRevokeOthers},
+		{G, "/api/account/authelia-passkeys", Authed, false, s.handleAutheliaPasskeyList},
+		{P, "/api/account/authelia-passkeys", StepUp, false, s.handleAutheliaPasskeyAdd},
+		{D, "/api/account/authelia-passkeys/{id}", StepUp, false, s.handleAutheliaPasskeyDelete},
+
+		// The page adding an Authelia passkey, on the portal's host
+		{P, caddy.PortalPasskeyPath + "/api/begin", Ticket, false, s.handlePortalPasskeyBegin},
+		{P, caddy.PortalPasskeyPath + "/api/finish", Ticket, false, s.handlePortalPasskeyFinish},
 
 		// Hub (app launcher) and system widgets
 		{G, "/api/hub", Authed, false, s.handleHub},

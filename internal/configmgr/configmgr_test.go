@@ -55,10 +55,14 @@ type fakeDocker struct {
 	output       string // of helper runs; "validation output" when empty
 	restarts     int
 	runs         []docker.RunSpec
+	onRun        func(docker.RunSpec)
 }
 
 func (f *fakeDocker) Run(_ context.Context, spec docker.RunSpec) (int64, string, error) {
 	f.runs = append(f.runs, spec)
+	if f.onRun != nil {
+		f.onRun(spec)
+	}
 	if f.output != "" {
 		return f.validateCode, f.output, nil
 	}

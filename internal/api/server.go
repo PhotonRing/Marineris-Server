@@ -104,16 +104,18 @@ type Deps struct {
 	Setup    *setup.Service
 	Sessions *auth.Sessions
 	Passkeys *auth.Passkeys
-	Throttle *auth.Throttle
-	Configs  Applier
-	Docker   DockerAPI
-	Stacks   StacksAPI
-	Certs    *certs.Checker
-	Icons    *icons.Fetcher
-	Stats    StatsSource
-	Log      *slog.Logger
-	Version  string
-	UI       http.Handler
+	// AutheliaPasskeys: the passkeys kept by Authelia.
+	AutheliaPasskeys AutheliaPasskeyStore
+	Throttle         *auth.Throttle
+	Configs          Applier
+	Docker           DockerAPI
+	Stacks           StacksAPI
+	Certs            *certs.Checker
+	Icons            *icons.Fetcher
+	Stats            StatsSource
+	Log              *slog.Logger
+	Version          string
+	UI               http.Handler
 }
 
 // Server is the API server.
@@ -126,6 +128,9 @@ type Server struct {
 	totpMu sync.Mutex
 	// totpEnrol holds a pending TOTP re-enrolment per user.
 	totpEnrol map[int64]*totpPending
+	ticketMu  sync.Mutex
+	// tickets of the page adding Authelia passkeys (portal_passkeys.go).
+	tickets map[string]*portalTicket
 
 	// bg tracks background applies (see applyAsync).
 	bg sync.WaitGroup
@@ -136,7 +141,7 @@ func (s *Server) Wait() { s.bg.Wait() }
 
 // New creates the API server.
 func New(d Deps) *Server {
-	s := &Server{Deps: d, mfa: map[string]*mfaPending{}, totpEnrol: map[int64]*totpPending{}}
+	s := &Server{Deps: d, mfa: map[string]*mfaPending{}, totpEnrol: map[int64]*totpPending{}, tickets: map[string]*portalTicket{}}
 	s.routes = s.table()
 	return s
 }
@@ -149,10 +154,13 @@ func (s *Server) Handler(listener string) http.Handler {
 	mux := http.NewServeMux()
 	for _, rt := range s.routes {
 		rt := rt
-		if rt.LocalOnly && listener != Local {
+		if (rt.LocalOnly && listener != Local) || (rt.Access == Ticket && listener != Edge) {
 			continue
 		}
 		mux.Handle(rt.Method+" "+rt.Pattern, s.wrap(listener, rt))
+	}
+	if listener == Edge {
+		mux.Handle(caddy.PortalPasskeyPath+"/", portalPageHandler())
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &Error{Status: http.StatusNotFound, Code: "not_found", Message: "no such endpoint"})
@@ -241,14 +249,19 @@ func (s *Server) wrap(listener string, rt Route) http.Handler {
 				Message: "first-run setup has not been completed; complete it through the local listener (SSH tunnel)"})
 			return
 		}
-		if isUnsafe(r.Method) {
+		if rt.Access == Ticket {
+			if err := s.checkPortalOrigin(ctx, settings, r); err != nil {
+				writeError(w, err)
+				return
+			}
+		} else if isUnsafe(r.Method) {
 			if err := s.checkOrigin(listener, settings, r); err != nil {
 				writeError(w, err)
 				return
 			}
 		}
 		switch rt.Access {
-		case Public:
+		case Public, Ticket:
 		case SetupOnly:
 			if settings.SetupComplete {
 				writeError(w, &Error{Status: http.StatusConflict, Code: "setup_complete", Message: "setup has already been completed"})

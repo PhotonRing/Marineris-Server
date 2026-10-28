@@ -6,6 +6,7 @@
   import Modal from '../components/Modal.svelte';
 
   let passkeys = $state([]);
+  let portalPasskeys = $state([]);
   let passkeyName = $state('');
   let current = $state('');
   let next = $state('');
@@ -17,15 +18,47 @@
   let totpOpen = $state(false);
   let notification = $state(null);
 
+  const portalHost = $derived(app.meta.portal_url ? new URL(app.meta.portal_url).host : '');
+
   async function load() {
     try {
       passkeys = await get('/api/account/passkeys');
+      if (app.meta.portal_url) portalPasskeys = await get('/api/account/authelia-passkeys');
     } catch (err) {
       toast(describe(err), 'error');
     }
   }
 
-  onMount(load);
+  onMount(() => {
+    // Back from the page that created an Authelia passkey.
+    const q = new URLSearchParams(location.search);
+    if (q.get('passkey') === 'added') {
+      toast('Passkey added');
+      history.replaceState(history.state, '', location.pathname);
+    }
+    load();
+  });
+
+  async function addPortalPasskey(e) {
+    e.preventDefault();
+    try {
+      const { url } = await post('/api/account/authelia-passkeys', { name: passkeyName.trim() || 'Passkey' });
+      location.assign(url);
+    } catch (err) {
+      toast(describe(err), 'error');
+    }
+  }
+
+  async function removePortalPasskey(p) {
+    if (!confirm(`Remove passkey “${p.name}”? Also delete it from your password manager or device.`)) return;
+    try {
+      await del(`/api/account/authelia-passkeys/${p.id}`);
+      toast('Passkey removed');
+      await load();
+    } catch (err) {
+      toast(describe(err), 'error');
+    }
+  }
 
   async function addPasskey() {
     try {
@@ -115,16 +148,37 @@
     <h2>Passkeys</h2>
     {#if app.meta.portal_url}
       <!-- Behind Authelia, its sign-in is the sign-in: a passkey that signs in
-           (to every app, the portal and this interface) is Authelia's. -->
+           (to every app, the portal and this interface) is Authelia's. It is
+           created on the portal's address, where it belongs: this page sends
+           the browser there for a moment, then back. -->
       <p class="small">
-        Sign in without a password, with Face ID, Touch ID, Windows Hello or a security key, to every app, the Authelia
-        portal and this interface. Passkeys are kept by the Authelia portal.
+        Sign in without a password, with Face ID, Touch ID, Windows Hello, a password manager or a security key, to every
+        app, the Authelia portal and this interface.
       </p>
-      <div class="row mt">
-        <a class="btn primary" href={`${app.meta.portal_url}/settings/two-factor-authentication`} target="_blank" rel="noopener noreferrer">
-          Add or manage passkeys
-        </a>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Added</th><th>Last used</th><th></th></tr></thead>
+          <tbody>
+            {#each portalPasskeys as p (p.id)}
+              <tr>
+                <td>{p.name}{#if p.host !== portalHost}<span class="small muted"> · {p.host}</span>{/if}</td>
+                <td class="small">{new Date(p.created_at).toLocaleString()}</td>
+                <td class="small">{p.last_used_at ? new Date(p.last_used_at).toLocaleString() : 'never'}</td>
+                <td class="right"><button class="small danger" onclick={() => removePortalPasskey(p)}>Remove</button></td>
+              </tr>
+            {:else}
+              <tr><td colspan="4" class="muted">No passkeys yet.</td></tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
+      <form class="row mt" onsubmit={addPortalPasskey}>
+        <!-- A label, not a credential: password managers must not offer to fill it. -->
+        <input class="w-full" bind:value={passkeyName} placeholder="Name, e.g. “MacBook Touch ID”" maxlength="64"
+          autocomplete="off" data-protonpass-ignore="true" data-1p-ignore data-bwignore data-lpignore="true" />
+        <button class="primary" type="submit">Add passkey</button>
+      </form>
+      <p class="small muted mt">The passkey is created on {portalHost}, the address of the sign-in page.</p>
       {#if passkeys.length}
         <div class="alert warning mt">
           The passkeys below were added to this interface only. They cannot sign you in, and a password manager may still offer
@@ -207,8 +261,8 @@
     <h2>Authelia messages</h2>
     <p class="small muted">
       Your password and authenticator app also sign you in to the Authelia portal: Marineris registers them there.
-      For some actions in the portal, such as adding a passkey, Authelia asks for a one-time code that it would
-      e-mail; Marineris shows that message here.
+      For some actions in the portal, Authelia asks for a one-time code that it would e-mail; Marineris shows that
+      message here. Passkeys added on this page need none.
     </p>
     <button onclick={loadNotification}>Show latest message</button>
     {#if notification}

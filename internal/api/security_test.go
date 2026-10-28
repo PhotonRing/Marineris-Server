@@ -30,6 +30,8 @@ func TestRouteTableGolden(t *testing.T) {
 		where := "both"
 		if r.LocalOnly {
 			where = "local"
+		} else if r.Access == Ticket {
+			where = "edge"
 		}
 		lines = append(lines, fmt.Sprintf("%-6s %-42s %-7s %s", r.Method, r.Pattern, r.Access, where))
 	}
@@ -94,7 +96,8 @@ func TestAccessMatrix(t *testing.T) {
 	e := newEnv(t)
 	admin, _ := e.completeSetup()
 	for _, rt := range e.srv.Routes() {
-		if rt.Access == Public || rt.Access == SetupOnly {
+		if rt.Access == Public || rt.Access == SetupOnly || rt.Access == Ticket {
+			// Ticket routes: TestAddAutheliaPasskeyFromTheUI.
 			continue
 		}
 		path := concrete(rt.Pattern)

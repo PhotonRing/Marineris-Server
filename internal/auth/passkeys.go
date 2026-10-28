@@ -248,3 +248,74 @@ func (p *Passkeys) FinishLogin(ctx context.Context, rp RP, ceremonyID string, bo
 	}
 	return found.u, nil
 }
+
+// External registration: a passkey for another relying party (the Authelia
+// portal), whose user handle that party chose. Marineris verifies it; the
+// caller stores it there.
+
+type externalUser struct {
+	handle []byte
+	name   string
+}
+
+func (e externalUser) WebAuthnID() []byte                         { return e.handle }
+func (e externalUser) WebAuthnName() string                       { return e.name }
+func (e externalUser) WebAuthnDisplayName() string                { return e.name }
+func (e externalUser) WebAuthnCredentials() []webauthn.Credential { return nil }
+
+// BeginExternalRegistration starts registering a passkey for username, with
+// user handle handle, at rp. exclude lists the user's existing credential
+// IDs there, so that an authenticator does not register twice.
+func (p *Passkeys) BeginExternalRegistration(rp RP, username string, handle []byte, exclude [][]byte) (string, *protocol.CredentialCreation, error) {
+	wa, err := p.instance(rp)
+	if err != nil {
+		return "", nil, err
+	}
+	var ex []protocol.CredentialDescriptor
+	for _, id := range exclude {
+		ex = append(ex, protocol.CredentialDescriptor{Type: protocol.PublicKeyCredentialType, CredentialID: id})
+	}
+	creation, session, err := wa.BeginRegistration(externalUser{handle: handle, name: username},
+		webauthn.WithResidentKeyRequirement(protocol.ResidentKeyRequirementRequired),
+		webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
+			ResidentKey:      protocol.ResidentKeyRequirementRequired,
+			UserVerification: protocol.VerificationRequired,
+		}),
+		webauthn.WithExclusions(ex),
+		webauthn.WithExtensions(webauthn.WithExtensionCredProps()),
+	)
+	if err != nil {
+		return "", nil, err
+	}
+	id := p.put(&ceremony{kind: "external", rp: rp, session: *session})
+	return id, creation, nil
+}
+
+// FinishExternalRegistration verifies the authenticator response. The
+// passkey is discoverable unless the browser says otherwise.
+func (p *Passkeys) FinishExternalRegistration(rp RP, username string, handle []byte, ceremonyID string, body []byte) (*webauthn.Credential, bool, error) {
+	c, ok := p.take(ceremonyID, "external")
+	if !ok || c.rp != rp {
+		return nil, false, ErrPasskey
+	}
+	wa, err := p.instance(rp)
+	if err != nil {
+		return nil, false, err
+	}
+	parsed, err := protocol.ParseCredentialCreationResponseBody(bytes.NewReader(body))
+	if err != nil {
+		return nil, false, fmt.Errorf("%w: %w", ErrPasskey, err)
+	}
+	cred, err := wa.CreateCredential(externalUser{handle: handle, name: username}, c.session, parsed)
+	if err != nil {
+		return nil, false, fmt.Errorf("%w: %w", ErrPasskey, err)
+	}
+	if !cred.Flags.UserVerified {
+		return nil, false, fmt.Errorf("%w: user verification missing", ErrPasskey)
+	}
+	discoverable := true
+	if props := parsed.ClientExtensionResults.CredProps; props != nil && props.RK != nil {
+		discoverable = *props.RK
+	}
+	return cred, discoverable, nil
+}

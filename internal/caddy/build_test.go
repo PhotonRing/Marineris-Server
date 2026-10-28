@@ -308,3 +308,35 @@ func TestCaddyValidate(t *testing.T) {
 		t.Fatalf("caddy validate failed: %v\n%s", err, out)
 	}
 }
+
+func TestPortalPasskeyPageRoute(t *testing.T) {
+	// The page adding Authelia passkeys is Marineris', on the portal hosts,
+	// only when Authelia protects the UI; identity headers never reach it.
+	in := baseInput()
+	in.Settings.UIProtectWithAuthelia = true
+	m := build(t, in)
+	routes := m["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["edge"].(map[string]any)["routes"].([]any)
+	page, portal := -1, -1
+	for i, r := range routes {
+		b, _ := json.Marshal(r)
+		s := string(b)
+		if strings.Contains(s, `"/marineris-passkey/*"`) {
+			page = i
+			del := strings.Index(s, `"delete":["Remote-User","Remote-Groups","Remote-Email","Remote-Name"]`)
+			proxy := strings.Index(s, `"dial":"marineris:8080"`)
+			if !strings.Contains(s, `"auth.example.com"`) || del < 0 || proxy < 0 || del > proxy {
+				t.Fatalf("passkey page route: %s", s)
+			}
+		} else if strings.Contains(s, `"dial":"authelia:9091"`) && strings.Contains(s, `"auth.example.com"`) && !strings.Contains(s, "forward") {
+			portal = i
+		}
+	}
+	if page < 0 || portal < 0 || page > portal {
+		t.Fatalf("page route %d must come before the portal %d", page, portal)
+	}
+
+	in.Settings.UIProtectWithAuthelia = false
+	if b, _ := Build(in); strings.Contains(string(b), "/marineris-passkey") {
+		t.Fatal("passkey page served while Authelia does not protect the UI")
+	}
+}
