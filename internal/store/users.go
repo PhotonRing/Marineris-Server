@@ -9,11 +9,14 @@ import (
 
 // User is an administrator of Marineris.
 type User struct {
-	ID            int64     `json:"id"`
-	Username      string    `json:"username"`
-	PasswordHash  string    `json:"-"`
-	TOTPSecret    string    `json:"-"` // sealed
-	TOTPLastStep  int64     `json:"-"`
+	ID           int64  `json:"id"`
+	Username     string `json:"username"`
+	PasswordHash string `json:"-"`
+	TOTPSecret   string `json:"-"` // sealed
+	TOTPLastStep int64  `json:"-"`
+	// AutheliaTOTP is the fingerprint of the TOTP secret last registered in
+	// Authelia (empty: none yet).
+	AutheliaTOTP  string    `json:"-"`
 	RecoveryCodes []string  `json:"-"` // hashes of unused codes
 	WebAuthnID    []byte    `json:"-"`
 	Role          string    `json:"role"`
@@ -21,12 +24,12 @@ type User struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-const userCols = `id, username, password_hash, totp_secret, totp_last_step, recovery_codes, webauthn_id, role, created_at, updated_at`
+const userCols = `id, username, password_hash, totp_secret, totp_last_step, authelia_totp, recovery_codes, webauthn_id, role, created_at, updated_at`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	var codes string
-	if err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.TOTPSecret, &u.TOTPLastStep, &codes, &u.WebAuthnID, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.TOTPSecret, &u.TOTPLastStep, &u.AutheliaTOTP, &codes, &u.WebAuthnID, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, notFound(err)
 	}
 	if err := json.Unmarshal([]byte(codes), &u.RecoveryCodes); err != nil {
@@ -105,6 +108,12 @@ func (s *Store) SetPasswordHash(ctx context.Context, id int64, hash string) erro
 // SetTOTP replaces a user's sealed TOTP secret and resets the replay counter.
 func (s *Store) SetTOTP(ctx context.Context, id int64, sealed string) error {
 	return s.execOne(ctx, `UPDATE users SET totp_secret = ?, totp_last_step = 0, updated_at = ? WHERE id = ?`, sealed, s.now(), id)
+}
+
+// SetAutheliaTOTP records the fingerprint of the TOTP secret registered in
+// Authelia for a user.
+func (s *Store) SetAutheliaTOTP(ctx context.Context, id int64, fingerprint string) error {
+	return s.execOne(ctx, `UPDATE users SET authelia_totp = ? WHERE id = ?`, fingerprint, id)
 }
 
 // AdvanceTOTPStep records that the TOTP code for step was used. It only

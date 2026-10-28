@@ -324,6 +324,11 @@ func (a *app) housekeeping(ctx context.Context) {
 			if n, err := a.store.PurgeExpiredSessions(ctx, time.Now().UTC(), a.cfg.SessionIdle); err == nil && n > 0 {
 				a.log.Info("purged expired sessions", "count", n)
 			}
+			// Authenticators changed while Authelia was unreachable, or by
+			// "marineris admin", are registered in Authelia here.
+			if err := a.cmgr.SyncAutheliaTOTP(ctx); err != nil {
+				a.log.Warn("authenticators not registered in Authelia yet", "err", err)
+			}
 		}
 	}
 }

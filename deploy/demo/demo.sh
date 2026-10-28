@@ -150,8 +150,9 @@ Marineris is running on this computer.
    Certificates come from Caddy's local CA: the browser warns once per
    site, accept it (Advanced -> Proceed).
    Authelia (https://auth.marineris.localhost) asks for your password, then
-   to register a second factor: "Register device", then "Add". It confirms
-   with a one-time code that the demo prints with:
+   for a code of the authenticator app set up in step 1: the same account
+   signs in to Marineris and to Authelia. For actions that need a one-time
+   code (such as adding a passkey in the portal), the demo prints it with:
      deploy/demo/demo.sh code
 
 Stop and delete everything:  deploy/demo/demo.sh down
