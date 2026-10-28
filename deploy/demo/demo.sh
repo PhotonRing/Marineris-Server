@@ -22,8 +22,14 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 default_base="$HOME/.marineris-demo"
 case "$HOME" in /root | /root/*) default_base=/opt/marineris-demo ;; esac
 BASE="${MARINERIS_DEMO_DIR:-$default_base}"
-DATA="$BASE/data"
 ENVFILE="$BASE/demo.env"
+# Docker Desktop (WSL) cannot bind-mount a folder deleted and created again at
+# the same path: each demo gets a data folder of its own, kept until "down".
+if [ -f "$ENVFILE" ]; then
+  DATA="$(sed -n 's/^MARINERIS_DATA=//p' "$ENVFILE")"
+else
+  DATA="$BASE/data-$(date +%Y%m%d%H%M%S)"
+fi
 # Steps that need root (file ownership) run in the demo's Caddy image: the
 # demo needs no other image.
 HELPER="--user 0 --entrypoint sh marineris-caddy:demo"
@@ -98,9 +104,9 @@ up() {
   # shellcheck disable=SC2086
   docker run --rm -v "$BASE:/base" $HELPER -c '
     set -e
-    for d in data data/stacks data/static data/authelia data/authelia-notify data/authelia-data data/secrets; do
-      install -d -o 65532 -g 65532 -m 0700 "/base/$d"
-    done'
+    for d in "" stacks static authelia authelia-notify authelia-data secrets; do
+      install -d -o 65532 -g 65532 -m 0700 "/base/$1/$d"
+    done' sh "${DATA##*/}"
 
   cat > "$ENVFILE" <<EOF
 MARINERIS_DATA=$DATA
@@ -159,7 +165,7 @@ down() {
   if [ -d "$BASE" ]; then
     # Files belong to the containers' user: delete them from a container too.
     # shellcheck disable=SC2086
-    docker run --rm -v "$BASE:/base" $HELPER -c 'rm -rf /base/data /base/demo.env'
+    docker run --rm -v "$BASE:/base" $HELPER -c 'rm -rf /base/data /base/data-* /base/demo.env'
     rm -rf "$BASE/docker-config"
     rmdir "$BASE" 2>/dev/null || true
   fi

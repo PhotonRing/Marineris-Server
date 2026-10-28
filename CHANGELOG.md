@@ -30,6 +30,15 @@ the list of commits and the image digests — then deletes merged branches.
   the missing key as a directory when compose created the CrowdSec
   container. The demo now prepares the data directory before starting the
   stack.
+- **Authelia changes failing with Docker Desktop.** Applying Authelia's
+  configuration failed with `error while creating mount source path …: file
+  exists`, then Authelia could not restart (`error mounting … to rootfs at
+  "/config"`). Docker Desktop cannot bind-mount a folder deleted and created
+  again at the same path: Marineris now keeps the folder it validates
+  Authelia's configuration in, and each demo started with `demo.sh up` gets
+  a data folder of its own.
+- **Settings: errors show next to the Save button**, instead of at the top
+  of the page, out of sight.
 
 ## [0.1.3] - 2026-10-28
 
