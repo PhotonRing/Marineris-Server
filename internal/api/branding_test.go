@@ -78,3 +78,29 @@ func TestBranding(t *testing.T) {
 		t.Fatalf("logo not reset: %v", b)
 	}
 }
+
+func TestConfigSummary(t *testing.T) {
+	e := newEnv(t)
+	admin, _ := e.completeSetup()
+	if r := admin.do("POST", "/api/domains", map[string]any{"name": "example.com"}); r.Status != 200 {
+		t.Fatalf("domain: %d %s", r.Status, r.Raw)
+	}
+	if r := admin.do("POST", "/api/routes", map[string]any{"name": "ops", "host": "ops.example.com", "kind": "container",
+		"target": map[string]any{"container": "web", "port": 80}, "auth": "admins", "enabled": true}); r.Status != 200 {
+		t.Fatalf("route: %d %s", r.Status, r.Raw)
+	}
+	r := admin.do("GET", "/api/config/summary", nil)
+	if r.Status != 200 {
+		t.Fatalf("summary: %d %s", r.Status, r.Raw)
+	}
+	s := string(r.Raw)
+	for _, want := range []string{`"address":"ops.example.com"`, `"access":"admins"`, `"target":"container web:80"`, `"address":"auth.example.com"`,
+		`"default_policy":"deny"`, `"group:admins"`, `"policy":"deny"`, `"username":"admin"`, `staging`, `"max_retries":5`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("summary misses %s:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "argon2id") || strings.Contains(s, "password") {
+		t.Fatal("the summary leaks password hashes")
+	}
+}

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/photonring/marineris-server/internal/auth"
+	"github.com/photonring/marineris-server/internal/authelia"
 	"github.com/photonring/marineris-server/internal/caddy"
 	"github.com/photonring/marineris-server/internal/certs"
 	"github.com/photonring/marineris-server/internal/config"
@@ -74,6 +75,7 @@ type StacksAPI interface {
 	Recreate(ctx context.Context, name string, composeYAML, env []byte, unsafeAck bool, services []string, pull bool) error
 	Down(ctx context.Context, name string, removeVolumes bool) error
 	Remove(name string) error
+	BindRoots() []string
 }
 
 // Applier applies generated configurations.
@@ -83,6 +85,7 @@ type Applier interface {
 	RollbackCaddy(ctx context.Context, actor string, versionID int64) error
 	RollbackAuthelia(ctx context.Context, actor string, versionID int64) error
 	CaddyInput(ctx context.Context) (caddy.Input, error)
+	AutheliaInput(ctx context.Context) (authelia.Input, error)
 	RenderCaddy(ctx context.Context) ([]byte, error)
 	Content(v *store.ConfigVersion) ([]byte, error)
 	Redact(ctx context.Context, content []byte) []byte

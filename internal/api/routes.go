@@ -141,6 +141,7 @@ func (s *Server) table() []Route {
 		{G, "/api/networks", Authed, false, s.handleNetworkList},
 
 		// Configuration history
+		{G, "/api/config/summary", Authed, false, s.handleConfigSummary},
 		{G, "/api/config/components/{component}/current", Authed, false, s.handleConfigCurrent},
 		{G, "/api/config/components/{component}/history", Authed, false, s.handleConfigHistory},
 		{G, "/api/config/versions/{id}", Authed, false, s.handleConfigVersion},

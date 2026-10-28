@@ -17,7 +17,7 @@ test('every page of the demo renders, signed in, with sample data', async ({ pag
   await expect(page.getByRole('note')).toContainText('Demo');
   await expect(page.getByRole('heading', { level: 2, name: 'Marineris' })).toBeVisible();
   await expect(page.getByText('Jellyfin')).toBeVisible();
-  for (const name of ['Dashboard', 'Containers', 'Stacks', 'Volumes & networks', 'Routes', 'Domains & certificates', 'DNS profiles', 'Configuration', 'Audit log', 'Settings', 'Account']) {
+  for (const name of ['Dashboard', 'Containers', 'Stacks', 'Volumes & networks', 'Routes', 'Domains & certificates', 'DNS profiles', 'Proxy & SSO', 'Audit log', 'Settings', 'Account']) {
     await page.getByRole('link', { name, exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
     expect(page.url()).toContain('/Marineris-Server/#/');
@@ -48,7 +48,9 @@ test('a route can be published and shows on the hub', async ({ page }) => {
   // The new app is on the hub, and the change is in the configuration history.
   await page.getByRole('link', { name: 'Hub', exact: true }).click();
   await expect(page.getByRole('link', { name: /^whoami/ })).toHaveAttribute('href', 'https://whoami.mars.example/');
-  await page.getByRole('link', { name: 'Configuration', exact: true }).click();
+  await page.getByRole('link', { name: 'Proxy & SSO', exact: true }).click();
+  await expect(page.getByRole('cell', { name: 'whoami.mars.example' })).toBeVisible();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
   await expect(page.getByText('route whoami added').first()).toBeVisible();
   expect(problems).toEqual([]);
 });
@@ -90,7 +92,7 @@ test('a stack: services with status and icons, editing a service, actions', asyn
   await expect(services.getByRole('button', { name: /jellyseerr/ })).toBeVisible();
   // Edit an environment variable and recreate the service.
   await page.getByRole('tab', { name: 'Environment' }).click();
-  await page.getByLabel('Variable 2 value').fill('https://films.mars.example');
+  await page.getByLabel('Value 2', { exact: true }).fill('https://films.mars.example');
   await page.getByRole('button', { name: 'Save & recreate' }).click();
   await expect(page.getByText('jellyfin saved and recreated')).toBeVisible();
   await services.getByRole('button', { name: /compose\.yaml/ }).click();
@@ -105,7 +107,9 @@ test('a stack: services with status and icons, editing a service, actions', asyn
   // The policy applies to edits too.
   await page.getByRole('tab', { name: 'Mounts' }).click();
   await page.getByRole('button', { name: '+ Add mount' }).click();
-  await page.getByLabel('config:/config 2').fill('/var/run/docker.sock:/var/run/docker.sock');
+  await page.getByLabel('Mount 2 type').selectOption('bind');
+  await page.getByLabel('Mount 2 host folder').fill('/var/run/docker.sock');
+  await page.getByLabel('Mount 2 path in the container').fill('/var/run/docker.sock');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText(/security policy/)).toBeVisible();
   expect(problems).toEqual([]);
@@ -121,4 +125,57 @@ test('branding from the settings', async ({ page }) => {
   await page.getByLabel('Accent colour (hex)').fill('blue');
   await page.getByRole('button', { name: 'Save branding' }).click();
   await expect(page.getByText(/must be a colour/)).toBeVisible();
+});
+
+test('proxy & SSO overview: sites and Authelia rules in plain terms', async ({ page }) => {
+  const problems = watch(page);
+  await page.goto('./#/proxy');
+  await expect(page.getByRole('cell', { name: 'nas.mars.example' })).toBeVisible();
+  await expect(page.getByText('wildcard *.mars.example (DNS-01)').first()).toBeVisible();
+  await page.getByRole('button', { name: /Authelia/ }).click();
+  // The admin-only NAS: admins get in with two factors, everyone else is denied.
+  await expect(page.getByRole('row', { name: /nas\.mars\.example.*group admins.*two-factor/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /nas\.mars\.example.*anyone.*deny/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Generated file' }).click();
+  await expect(page.getByText(/Raw edits that survive regeneration come in Phase 2/)).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
+test('a service: labels with suggestions, typed mounts', async ({ page }) => {
+  const problems = watch(page);
+  await page.goto('./#/stacks/media');
+  const services = page.getByRole('navigation', { name: 'Services' });
+  await services.getByRole('button', { name: /jellyseerr/ }).click();
+  // Make jellyseerr the main service through its labels.
+  await page.getByRole('tab', { name: 'Labels' }).click();
+  await page.getByRole('button', { name: '+ Add label' }).click();
+  await page.getByLabel('Name 1').fill('io.marineris.main');
+  await expect(page.locator('.key-help')).toHaveText('Main service: its icon represents the stack.');
+  await page.getByLabel('Value 1').selectOption('true');
+  // Mounts: a new read-only volume and a host folder.
+  await page.getByRole('tab', { name: 'Mounts' }).click();
+  await page.getByRole('button', { name: '+ Add mount' }).click();
+  await page.getByLabel('Mount 2 volume').selectOption('new');
+  await page.getByLabel('Mount 2 new volume name').fill('posters');
+  await page.getByLabel('Mount 2 path in the container').fill('/posters');
+  await page.getByLabel('Mount 2 read-only').check();
+  await page.getByRole('button', { name: '+ Add mount' }).click();
+  await page.getByLabel('Mount 3 type').selectOption('bind');
+  await page.getByLabel('Mount 3 host folder').fill('/srv/media/requests');
+  await page.getByLabel('Mount 3 path in the container').fill('/imports');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText(/jellyseerr saved/)).toBeVisible();
+  await services.getByRole('button', { name: /compose\.yaml/ }).click();
+  const compose = page.getByLabel('compose.yaml');
+  await expect(compose).toHaveValue(/- posters:\/posters:ro/);
+  await expect(compose).toHaveValue(/- \/srv\/media\/requests:\/imports/);
+  await expect(compose).toHaveValue(/\n {2}posters: \{\}/);
+  await expect(compose).toHaveValue(/jellyseerr:[\s\S]*io\.marineris\.main: "true"/);
+  // A container path must be absolute.
+  await services.getByRole('button', { name: /jellyfin/ }).click();
+  await page.getByRole('tab', { name: 'Mounts' }).click();
+  await page.getByLabel('Mount 1 path in the container').fill('config');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText(/must be absolute/)).toBeVisible();
+  expect(problems).toEqual([]);
 });

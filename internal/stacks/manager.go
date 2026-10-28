@@ -56,6 +56,10 @@ func NewManager(root, dockerHost string, bindRoots, reservedNames []string) *Man
 	return &Manager{root: root, dockerHost: dockerHost, bindRoots: bindRoots, reservedNames: reservedNames}
 }
 
+// BindRoots returns the host directories bind mounts may come from (besides
+// the stack's own directory).
+func (m *Manager) BindRoots() []string { return append([]string(nil), m.bindRoots...) }
+
 // Dir returns the directory of a stack.
 func (m *Manager) Dir(name string) string { return filepath.Join(m.root, name) }
 

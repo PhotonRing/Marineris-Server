@@ -67,6 +67,10 @@ type stackSummary struct {
 	Icon     string        `json:"icon"`
 	State    string        `json:"state"`
 	Services []serviceView `json:"services"`
+	// For the mounts editor: volumes declared in the file, and where bind
+	// mounts may come from besides the stack's folder.
+	Volumes   []string `json:"volumes"`
+	BindRoots []string `json:"bind_roots"`
 }
 
 // stackServices describes the services of a stack: definition, containers,
@@ -74,7 +78,10 @@ type stackSummary struct {
 // labelled io.marineris.main, else the first one published by a route, else
 // the first one of the file.
 func (s *Server) stackServices(ctx context.Context, st *store.Stack, containers []docker.Container) (stackSummary, error) {
-	sum := stackSummary{Services: []serviceView{}}
+	sum := stackSummary{Services: []serviceView{}, Volumes: stacks.TopVolumes([]byte(st.Compose)), BindRoots: []string{}}
+	if s.Stacks != nil {
+		sum.BindRoots = s.Stacks.BindRoots()
+	}
 	defs, err := stacks.Services([]byte(st.Compose))
 	if err != nil {
 		return sum, badRequest(err.Error())

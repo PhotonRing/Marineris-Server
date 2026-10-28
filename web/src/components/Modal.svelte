@@ -1,4 +1,5 @@
 <script>
+  import X from '@lucide/svelte/icons/x';
   let { open = $bindable(false), title = '', wide = false, onclose = () => {}, children, actions } = $props();
   let dlg;
 
@@ -18,7 +19,7 @@
   {#if open}
     <div class="spread">
       <h2>{title}</h2>
-      <button class="ghost small" type="button" aria-label="Close" onclick={() => (open = false)}>✕</button>
+      <button class="ghost small" type="button" aria-label="Close" onclick={() => (open = false)}><X size={16} aria-hidden="true" /></button>
     </div>
     <div class="stack">
       {@render children?.()}

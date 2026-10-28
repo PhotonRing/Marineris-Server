@@ -102,6 +102,7 @@ func (fakeStacks) Recreate(context.Context, string, []byte, []byte, bool, []stri
 }
 func (fakeStacks) Down(context.Context, string, bool) error { return nil }
 func (fakeStacks) Remove(string) error                      { return nil }
+func (fakeStacks) BindRoots() []string                      { return []string{"/srv"} }
 
 type env struct {
 	t      *testing.T

@@ -1,4 +1,8 @@
 <script>
+  import Lock from '@lucide/svelte/icons/lock';
+  import ShieldCheck from '@lucide/svelte/icons/shield-check';
+  import ArrowDown from '@lucide/svelte/icons/arrow-down';
+  import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import { onMount, onDestroy } from 'svelte';
   import { get, describe } from '../lib/api.js';
   import { link } from '../lib/router.js';
@@ -134,7 +138,7 @@
         {#if widgets.has('network')}
           <div class="widget">
             <div class="w-label">Network{stats.net_host ? '' : ' (container)'}</div>
-            <div class="w-value net"><span>↓ {bytes(stats.net_rx_rate)}/s</span><span>↑ {bytes(stats.net_tx_rate)}/s</span></div>
+            <div class="w-value net"><span class="row tight"><ArrowDown size={16} aria-label="received" />{bytes(stats.net_rx_rate)}/s</span><span class="row tight"><ArrowUp size={16} aria-label="sent" />{bytes(stats.net_tx_rate)}/s</span></div>
           </div>
         {/if}
         {#if widgets.has('uptime')}
@@ -160,7 +164,7 @@
               <span class="tile-icon tile-initials" aria-hidden="true">{initials(t.title)}</span>
             {/if}
             <span class="tile-text">
-              <span class="tile-title">{t.title}{#if t.auth === 'admins'}<span class="tile-lock" title="Administrators only">🛡</span>{:else if t.auth === 'authelia'}<span class="tile-lock" title="Protected by Authelia">🔒</span>{/if}</span>
+              <span class="tile-title">{t.title}{#if t.auth === 'admins'}<span class="tile-lock" title="Administrators only"><ShieldCheck size={14} aria-label="Administrators only" /></span>{:else if t.auth === 'authelia'}<span class="tile-lock" title="Protected by Authelia"><Lock size={14} aria-label="Protected by Authelia" /></span>{/if}</span>
               {#if t.subtitle}<span class="tile-sub muted">{t.subtitle}</span>{/if}
             </span>
           </a>

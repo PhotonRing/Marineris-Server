@@ -1,4 +1,5 @@
 <script>
+  import KeyRound from '@lucide/svelte/icons/key-round';
   import BrandLogo from '../components/BrandLogo.svelte';
   import { post, describe } from '../lib/api.js';
   import { setSession, passkeyLogin } from '../lib/state.svelte.js';
@@ -77,7 +78,7 @@
       </form>
       {#if passkeysSupported()}
         <div class="divider">or</div>
-        <button class="w-full" onclick={withPasskey} disabled={busy}>🔑 Sign in with a passkey</button>
+        <button class="w-full" onclick={withPasskey} disabled={busy}><KeyRound size={16} aria-hidden="true" />Sign in with a passkey</button>
       {/if}
     {:else}
       <form onsubmit={submitCode}>

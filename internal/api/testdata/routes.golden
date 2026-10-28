@@ -16,6 +16,7 @@ GET    /api/branding/{asset}                      public  both
 GET    /api/certificates                          authed  both
 GET    /api/config/components/{component}/current authed  both
 GET    /api/config/components/{component}/history authed  both
+GET    /api/config/summary                        authed  both
 GET    /api/config/versions/{id}                  authed  both
 GET    /api/containers                            authed  both
 GET    /api/containers/{id}                       authed  both
