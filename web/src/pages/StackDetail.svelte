@@ -499,7 +499,7 @@
             <div class="row">
               <AppIcon src={svc.icon} name={svc.name} size={64} />
               <div class="muted small">
-                {#if svc.icon_source === 'custom'}Custom icon.{:else if svc.icon_source === 'route'}Icon of the route that publishes this service.{:else}No icon yet: initials are shown.{/if}
+                {#if svc.icon_source === 'custom'}The routes to this service show this icon too, unless they have one of their own.{:else}No icon yet: initials are shown.{/if}
                 {#if svc.main}<div>This is the stack's main service: its icon represents the stack.</div>
                 {:else}<div>To use it for the stack, add the label <code>io.marineris.main</code> = <code>true</code> in the Labels tab.</div>{/if}
               </div>
@@ -518,7 +518,7 @@
             {/if}
             <p class="muted small">The image is downloaded once by the server and served by Marineris: browsers never load it from elsewhere.</p>
             <div class="row end">
-              {#if svc.icon_source === 'custom'}<button onclick={() => run('icon', () => del(`${base}/icons/${encodeURIComponent(selected)}`), 'Icon removed')} title="Go back to the route's icon or to initials">Remove icon</button>{/if}
+              {#if svc.icon_source === 'custom'}<button onclick={() => run('icon', () => del(`${base}/icons/${encodeURIComponent(selected)}`), 'Icon removed')} title="Remove this icon (initials are shown, here and on the routes that follow it)">Remove icon</button>{/if}
               <button class="primary" onclick={saveIcon} disabled={!!busy} title="Download or upload the chosen icon for this service">Set icon</button>
             </div>
           {:else if tab === 'terminal'}

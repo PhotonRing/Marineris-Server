@@ -715,10 +715,19 @@ func (s *Server) handleRouteList(w http.ResponseWriter, r *http.Request, rc *req
 	if err != nil {
 		return err
 	}
-	if rs == nil {
-		rs = []*store.Route{}
+	ir, err := s.newIconResolver(r.Context())
+	if err != nil {
+		return err
 	}
-	return ok(w, rs)
+	type routeView struct {
+		*store.Route
+		Icon string `json:"icon"` // resolved hub icon (own, linked or automatic)
+	}
+	out := make([]routeView, 0, len(rs))
+	for _, rt := range rs {
+		out = append(out, routeView{Route: rt, Icon: ir.url(rt)})
+	}
+	return ok(w, out)
 }
 
 func (s *Server) prepareRoute(ctx context.Context, req *routeRequest, rt *store.Route, replaceID int64) error {

@@ -64,12 +64,6 @@ export async function api(method, path, body, { raw = false, retry = true } = {}
   return data;
 }
 
-// Address of a route's hub icon (cache-busted).
-let demoBackend = null;
-if (demo) demo.then((m) => (demoBackend = m));
-export function iconURL(id) {
-  return demo ? demoBackend?.iconURL(id) || '' : `/api/hub/icons/${id}?t=${Date.now()}`;
-}
 
 export const get = (p) => api('GET', p);
 export const post = (p, b) => api('POST', p, b ?? {});

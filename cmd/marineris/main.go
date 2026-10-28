@@ -244,6 +244,24 @@ func serve() error {
 
 	go a.applyOnStartup(ctx)
 	go a.housekeeping(ctx)
+	go func() {
+		// One-time data migrations that need Docker: retried until Docker
+		// (the socket proxy) answers, for a while after startup.
+		for range 20 {
+			done, err := srv.MoveRouteIconsToServices(ctx)
+			if err != nil {
+				log.Warn("moving route icons to their services failed", "err", err)
+			}
+			if done || err != nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(30 * time.Second):
+			}
+		}
+	}()
 
 	select {
 	case <-ctx.Done():

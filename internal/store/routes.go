@@ -65,17 +65,22 @@ type HubEntry struct {
 	Visible  bool   `json:"visible"`
 	Title    string `json:"title"`    // empty: the route name
 	Subtitle string `json:"subtitle"` // optional
-	HasIcon  bool   `json:"has_icon"` // read-only
+	HasIcon  bool   `json:"has_icon"` // read-only: the route has an icon of its own
+	// IconLink shows the icon of a stack ("media") or of a service
+	// ("media/jellyfin") instead (read-only: see SetRouteIconLink). Without
+	// an icon of its own nor a link, a route to a stack's container shows
+	// its service's icon.
+	IconLink string `json:"icon_link"`
 }
 
 const routeCols = `id, name, host, path_prefix, kind, target, auth, rate_limit, enabled, created_at, updated_at,
-	hub_visible, hub_title, hub_subtitle, EXISTS(SELECT 1 FROM route_icons i WHERE i.route_id = routes.id)`
+	hub_visible, hub_title, hub_subtitle, EXISTS(SELECT 1 FROM route_icons i WHERE i.route_id = routes.id), hub_icon_link`
 
 func scanRoute(row interface{ Scan(...any) error }) (*Route, error) {
 	var r Route
 	var target, rl string
 	if err := row.Scan(&r.ID, &r.Name, &r.Host, &r.PathPrefix, &r.Kind, &target, &r.Auth, &rl, &r.Enabled, &r.CreatedAt, &r.UpdatedAt,
-		&r.Hub.Visible, &r.Hub.Title, &r.Hub.Subtitle, &r.Hub.HasIcon); err != nil {
+		&r.Hub.Visible, &r.Hub.Title, &r.Hub.Subtitle, &r.Hub.HasIcon, &r.Hub.IconLink); err != nil {
 		return nil, notFound(err)
 	}
 	if err := json.Unmarshal([]byte(target), &r.Target); err != nil {
@@ -195,6 +200,12 @@ func (s *Store) GetRouteIcon(ctx context.Context, routeID int64) (*RouteIcon, er
 		return nil, notFound(err)
 	}
 	return &ic, nil
+}
+
+// SetRouteIconLink links a route's hub icon to a stack or a service (""
+// removes the link). It also bumps updated_at, which versions icon URLs.
+func (s *Store) SetRouteIconLink(ctx context.Context, routeID int64, link string) error {
+	return s.execOne(ctx, `UPDATE routes SET hub_icon_link = ?, updated_at = ? WHERE id = ?`, link, s.now(), routeID)
 }
 
 // DeleteRouteIcon removes the icon of a route.

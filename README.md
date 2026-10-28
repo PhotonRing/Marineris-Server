@@ -48,8 +48,8 @@
   ([dashboard-icons](https://github.com/homarr-labs/dashboard-icons)), or set
   with an `io.marineris.icon` label or from the UI; the stack takes the icon
   of its main service (`io.marineris.main: "true"`, else the one published by
-  a route, else the first one). A route can reuse the icon of a stack or of
-  one of its services.
+  a route, else the first one). Routes follow the icon of their service (or
+  of any other stack or service), unless you give them one of their own.
 - **Routes.** Pick a container (its port is selected automatically), an external
   host (LAN appliance, other server) or a static folder / single-page app.
   Per-route Authelia 2FA protection — for everyone with an account, or

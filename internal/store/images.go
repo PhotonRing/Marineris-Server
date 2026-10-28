@@ -69,3 +69,16 @@ func (s *Store) DeleteImagesWithPrefix(ctx context.Context, kind, prefix string)
 	_, err := s.db.ExecContext(ctx, `DELETE FROM images WHERE kind = ? AND substr(key, 1, ?) = ?`, kind, len(prefix), prefix)
 	return err
 }
+
+// Done reports whether a one-time task (a data migration) has run.
+func (s *Store) Done(ctx context.Context, task string) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM settings WHERE key = ?`, "done:"+task).Scan(&n)
+	return n > 0, err
+}
+
+// MarkDone records that a one-time task has run.
+func (s *Store) MarkDone(ctx context.Context, task string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)`, "done:"+task, s.now().Format(time.RFC3339))
+	return err
+}

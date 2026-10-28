@@ -210,16 +210,43 @@ test('stack buttons fit the state and explain themselves; rename', async ({ page
   expect(problems).toEqual([]);
 });
 
-test('a route reuses the icon of a stack service', async ({ page }) => {
+test('route icons follow their service; a route icon of its own can be undone', async ({ page }) => {
   const problems = watch(page);
   await page.goto('./#/routes');
+  // A new route to a stack's container shows its service's icon, without a choice to make.
   await page.getByRole('button', { name: 'New route' }).click();
   await page.getByLabel('Container', { exact: true }).selectOption('jellyseerr');
-  await expect(page.getByLabel('Icon', { exact: true })).toHaveValue('stack');
-  await expect(page.getByLabel('Stack or service whose icon to use')).toHaveValue('media/jellyseerr');
+  await expect(page.getByLabel('Icon', { exact: true }).locator('option:checked')).toHaveText('The icon of its service, media › jellyseerr');
   await page.getByLabel('Subdomain').fill('requests');
   await page.getByRole('button', { name: 'Save & apply' }).click();
+  await expect(page.getByRole('cell', { name: /requests\.mars\.example/ })).toBeVisible();
+
+  // Jellyfin: every stack and service icon can be chosen.
+  await page.getByRole('row', { name: /media\.mars\.example/ }).getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByLabel('Icon', { exact: true }).locator('option:checked')).toHaveText('Keep: the icon of its service, media › jellyfin');
+  await page.getByLabel('Icon', { exact: true }).selectOption('stack');
+  const choices = await page.getByLabel('Stack or service whose icon to use').locator('option').allTextContents();
+  expect(choices).toEqual(expect.arrayContaining(['media (stack)', 'media › jellyfin', 'media › jellyseerr', 'monitoring (stack)', 'monitoring › uptime-kuma']));
+  // Give it an icon of its own, then go back: the service's icon is intact.
+  await page.getByLabel('Icon', { exact: true }).selectOption('url');
+  await page.getByPlaceholder('https://example.com/icon.png').fill('https://example.com/films.png');
+  await page.getByRole('button', { name: 'Save & apply' }).click();
+  await page.getByRole('row', { name: /media\.mars\.example/ }).getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByLabel('Icon', { exact: true }).locator('option:checked')).toHaveText('Keep: its own icon');
+  await page.getByLabel('Icon', { exact: true }).selectOption('auto');
+  await page.getByRole('button', { name: 'Save & apply' }).click();
   await page.getByRole('link', { name: 'Hub', exact: true }).click();
+  await expect(page.getByRole('link', { name: /^Jellyfin/ }).locator('img')).toHaveAttribute('src', /^data:image\/svg/);
   await expect(page.getByRole('link', { name: /^jellyseerr/ }).locator('img')).toHaveAttribute('src', /^data:image\/svg/);
+
+  // Changing the service's icon changes the route's.
+  await page.goto('./#/stacks/media');
+  await page.getByRole('tab', { name: 'Icon' }).click();
+  await page.getByRole('button', { name: 'From a URL' }).click();
+  await page.getByLabel('Image URL').fill('https://example.com/new-jellyfin.png');
+  await page.getByRole('button', { name: 'Set icon' }).click();
+  await expect(page.getByText('Icon updated')).toBeVisible();
+  await page.getByRole('link', { name: 'Hub', exact: true }).click();
+  await expect(page.getByRole('link', { name: /^Jellyfin/ }).locator('img')).toHaveAttribute('src', 'https://example.com/new-jellyfin.png');
   expect(problems).toEqual([]);
 });
