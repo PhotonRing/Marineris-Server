@@ -50,6 +50,12 @@ buttons that say what they do.
   exactly what it does (and what it keeps).
 - The routes page loads containers and stack icons in parallel.
 
+### Security
+
+- Caddy image: `go-jose` 4.1.6 (CVE-2026-116587, denial of service when
+  parsing JSON Web Keys with RSA keys), used by the DNS providers and ACME.
+  Upgrade from 0.1.1 to get it.
+
 ## [0.1.1] - 2026-10-28
 
 Phase 1, continued: a stack editor, branding, administrators-only routes and a
