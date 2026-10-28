@@ -167,6 +167,22 @@ func TestUIProtectedByAutheliaByDefault(t *testing.T) {
 	}
 }
 
+func TestUnprotectedUIStripsIdentityHeaders(t *testing.T) {
+	// Marineris trusts Remote-User once Authelia protects the UI: a client's
+	// copy must never reach it, even while the setting is off.
+	in := baseInput()
+	in.Settings.UIProtectWithAuthelia = false
+	m := build(t, in)
+	routes := m["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["edge"].(map[string]any)["routes"].([]any)
+	first, _ := json.Marshal(routes[0])
+	s := string(first)
+	del := strings.Index(s, `"delete":["Remote-User","Remote-Groups","Remote-Email","Remote-Name"]`)
+	proxy := strings.Index(s, `"handler":"reverse_proxy"`)
+	if strings.Contains(s, "forward-auth") || del < 0 || proxy < 0 || del > proxy {
+		t.Fatalf("identity headers not deleted before the UI: %s", s)
+	}
+}
+
 func TestUIHostOutsideDomainsIsNotServed(t *testing.T) {
 	in := baseInput()
 	in.Settings.UIHost = "ui.other.com"

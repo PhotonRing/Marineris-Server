@@ -59,9 +59,12 @@
   Cloudflare, Gandi, Infomaniak and Route 53 — e.g. *OVH personal*, *OVH
   friend* — each with a **Test** button that creates, reads back and deletes a
   real TXT record. Live certificate status. Staging CA by default.
-- **Authentication.** Admin login with password + TOTP or **passkeys**
-  (WebAuthn), one-time recovery codes, step-up confirmation for sensitive
-  actions. Authelia in front of the public UI and of any route (2FA, passkeys).
+- **Authentication.** One account and **one sign-in** for the portal, every
+  protected route and the UI: Authelia signs in (password + TOTP, or a
+  **passkey** alone), and the UI trusts that sign-in. Marineris registers each
+  user's authenticator in Authelia, so no e-mail server is needed. One-time
+  recovery codes, step-up confirmation for sensitive actions, and a
+  break-glass login of its own on the local listener.
 - **Shield.** CrowdSec bouncer in Caddy, per-IP rate limiting.
 - **Secure by default.** No default passwords; the admin is locked until
   first-run setup, which is only reachable through an SSH tunnel and needs a
@@ -146,7 +149,7 @@ Full guide: [docs/install.md](docs/install.md).
 | Phase | Scope |
 |---|---|
 | 1 ✅ | Repository, CI, compose stack, first-run setup, containers/stacks (stack page with per-service status, actions, editing of mounts, labels and more, icons), routes (public, 2FA or admins only), multi-domain certificates with DNS profiles, passkeys, branding from the UI, Proxy & SSO overview |
-| 2 | Users, groups and OIDC clients UI; per-route access by user and group (beyond "administrators only"); CrowdSec UI (decisions, allow-lists, alerts); dashboard; monitoring and alerts, with per-service CPU, memory and network graphs on the stack page; live log streaming; **Proxy & SSO editing**: Authelia settings from the UI (session lifetimes, login ban, password policy, e-mail notifier) and raw Caddy/Authelia edits kept across regenerations (validated overrides); mount options beyond read-only (tmpfs, bind propagation, volume sub-paths, NFS/CIFS volumes) |
+| 2 | Users, groups and OIDC clients UI; per-route access by user and group (beyond "administrators only"); CrowdSec UI (decisions, allow-lists, alerts); dashboard; monitoring and alerts, with per-service CPU, memory and network graphs on the stack page; live log streaming; **Proxy & SSO editing**: Authelia settings from the UI (session lifetimes, login ban, password policy, optional e-mail notifier); Authelia's messages (one-time codes) shown per user, each user seeing only their own and raw Caddy/Authelia edits kept across regenerations (validated overrides); mount options beyond read-only (tmpfs, bind propagation, volume sub-paths, NFS/CIFS volumes) |
 | 3 | Backups (restic); **web terminal** inside containers (the stack page's Terminal tab: needs Docker `exec` through the socket proxy, with audit and step-up); stacks built from a Git repository or Dockerfile ("rebuild"); marketplace (Cosmos-compatible catalogs, compose templates, app icons) |
 | 4 | Disk manager: SMART, mdadm RAID (incl. RAID10), privileged helper with a fixed command set |
 

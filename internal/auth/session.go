@@ -41,6 +41,11 @@ func HashToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// MethodAuthelia is the method of a session opened from the Authelia
+// sign-in (see the api package): it never counts as a recent confirmation,
+// so sensitive actions still ask for a step-up.
+const MethodAuthelia = "authelia"
+
 // Create starts a session for userID, sets the cookie and returns the
 // session (with its CSRF token).
 func (s *Sessions) Create(ctx context.Context, w http.ResponseWriter, r *http.Request, userID int64, method string) (*store.Session, error) {
@@ -61,6 +66,9 @@ func (s *Sessions) Create(ctx context.Context, w http.ResponseWriter, r *http.Re
 		IP:         ClientIP(r),
 		UserAgent:  ua,
 		Method:     method,
+	}
+	if method == MethodAuthelia {
+		se.AuthAt = time.Time{}
 	}
 	if err := s.store.CreateSession(ctx, se); err != nil {
 		return nil, err

@@ -169,8 +169,11 @@ func configDoc(in Input) m {
 			"skew":      1,
 		},
 		"webauthn": m{
-			"disable":                           false,
-			"enable_passkey_login":              true,
+			"disable":              false,
+			"enable_passkey_login": true,
+			// A passkey unlocked on the device (Face ID, fingerprint, PIN) is
+			// two factors: it signs in alone, like everywhere else.
+			"experimental_enable_passkey_uv_two_factors": true,
 			"display_name":                      "Marineris",
 			"attestation_conveyance_preference": "indirect",
 			"timeout":                           "60s",
@@ -211,6 +214,13 @@ func configDoc(in Input) m {
 			"expiration":  "12h",
 			"remember_me": -1,
 			"cookies":     cookies,
+		},
+		// Actions that need a confirmed identity (registering a passkey in
+		// the portal) rely on the second factor of the sign-in instead of a
+		// one-time code sent by e-mail: Marineris registers every user's
+		// authenticator, and a password-only session is never enough.
+		"identity_validation": m{
+			"elevated_session": m{"require_second_factor": true, "skip_second_factor": true},
 		},
 		"regulation": m{
 			"max_retries": 5,

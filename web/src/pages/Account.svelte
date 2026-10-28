@@ -113,10 +113,23 @@
 <div class="stack">
   <div class="card">
     <h2>Passkeys</h2>
-    <p class="small muted">
-      Sign in without a password using Face ID, Touch ID, Windows Hello or a security key. Passkeys are tied to the address
-      you register them on ({app.meta.listener === 'local' ? 'localhost, through the SSH tunnel' : app.meta.ui_host}).
-    </p>
+    {#if app.meta.portal_url}
+      <p class="small">
+        To sign in with a passkey (Face ID, Touch ID, Windows Hello or a security key) to every app, the Authelia portal and
+        this interface, add it in the
+        <a href={`${app.meta.portal_url}/settings/two-factor-authentication`} target="_blank" rel="noopener noreferrer">Authelia portal</a>:
+        it asks for your authenticator code to confirm.
+      </p>
+      <p class="small muted">
+        The passkeys below only confirm sensitive actions on {app.meta.ui_host}. Passkeys for the break-glass listener are added
+        there (localhost, through the SSH tunnel).
+      </p>
+    {:else}
+      <p class="small muted">
+        Sign in without a password using Face ID, Touch ID, Windows Hello or a security key. Passkeys are tied to the address
+        you register them on ({app.meta.listener === 'local' ? 'localhost, through the SSH tunnel' : app.meta.ui_host}).
+      </p>
+    {/if}
     <div class="table-wrap">
       <table>
         <thead><tr><th>Name</th><th>Added</th><th>Last used</th><th></th></tr></thead>
