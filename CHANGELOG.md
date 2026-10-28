@@ -18,6 +18,14 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`deploy/demo/demo.sh up` on Windows (WSL 2).** When Docker Desktop's
+  credential helper (`docker-credential-desktop.exe`) cannot run in the WSL
+  distribution, every image pull failed with `exec format error`. The demo
+  now detects it and pulls its public images without the helper, leaving
+  your Docker configuration untouched.
+
 ## [0.1.3] - 2026-10-28
 
 Icons belong to your apps, not to their routes.

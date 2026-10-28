@@ -43,10 +43,43 @@ code() {
     sed -n 's/^[[:space:]]*\([A-Z0-9]\{8\}\)[[:space:]]*$/\1/p' | tail -n 1
 }
 
+# Docker Desktop's WSL integration writes "credsStore": "desktop.exe" in the
+# Docker configuration; the helper is a Windows program that fails ("exec
+# format error") when the distribution cannot run Windows programs (interop
+# disabled, often by systemd), and every image pull then fails. The demo only
+# pulls public images: it then uses a copy of the configuration without the
+# helper, and leaves the user's own untouched.
+skip_broken_credential_helper() {
+  conf="${DOCKER_CONFIG:-$HOME/.docker}"
+  [ -f "$conf/config.json" ] || return 0
+  store=$(sed -n 's/.*"credsStore"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$conf/config.json" | head -n 1)
+  [ -n "$store" ] || return 0
+  docker-credential-"$store" list </dev/null >/dev/null 2>&1 && return 0
+
+  echo "==> docker-credential-$store cannot run here: pulling without it (public images only)"
+  alt="$BASE/docker-config"
+  rm -rf "$alt"
+  mkdir -p "$alt"
+  # Contexts, CLI plugins and buildx state stay shared with the real configuration.
+  for f in "$conf"/*; do
+    [ -e "$f" ] && [ "${f##*/}" != config.json ] && ln -s "$f" "$alt/"
+  done
+  context=$(sed -n 's/.*"currentContext"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$conf/config.json" | head -n 1)
+  if [ -n "$context" ]; then
+    printf '{"currentContext": "%s"}\n' "$context" > "$alt/config.json"
+  else
+    echo '{}' > "$alt/config.json"
+  fi
+  DOCKER_CONFIG="$alt"
+  export DOCKER_CONFIG
+}
+
 up() {
   docker compose version >/dev/null 2>&1 || { echo "Docker with the compose plugin is required." >&2; exit 1; }
   sock=/var/run/docker.sock
   [ -S "$sock" ] || { echo "No Docker socket at $sock (Linux or WSL 2 is required)." >&2; exit 1; }
+  mkdir -p "$BASE"
+  skip_broken_credential_helper
 
   if [ "${SKIP_BUILD:-0}" = "1" ]; then
     echo "==> Using the existing images (SKIP_BUILD=1)"
@@ -120,6 +153,7 @@ down() {
     # Files belong to the containers' user: delete them from a container too.
     # shellcheck disable=SC2086
     docker run --rm -v "$BASE:/base" $HELPER -c 'rm -rf /base/data /base/demo.env'
+    rm -rf "$BASE/docker-config"
     rmdir "$BASE" 2>/dev/null || true
   fi
   echo "The demo is stopped and its data deleted."
