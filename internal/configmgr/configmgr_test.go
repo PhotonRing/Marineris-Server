@@ -287,8 +287,10 @@ func TestApplyAutheliaInvalidKeepsFiles(t *testing.T) {
 	if st, err := os.Stat(cand); err != nil || !st.IsDir() {
 		t.Fatalf("candidate directory deleted: %v", err)
 	}
-	if entries, _ := os.ReadDir(cand); len(entries) != 0 {
-		t.Fatalf("candidate files left behind: %v", entries)
+	for _, e := range mustReadDir(t, cand) {
+		if !e.IsDir() {
+			t.Fatalf("candidate file left behind: %s", e.Name())
+		}
 	}
 }
 
@@ -363,4 +365,13 @@ func TestCaddyListen(t *testing.T) {
 	if got := caddyListen("http://caddy:2019"); got != "caddy:2019" {
 		t.Fatal(got)
 	}
+}
+
+func mustReadDir(t *testing.T, dir string) []os.DirEntry {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return entries
 }

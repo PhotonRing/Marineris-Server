@@ -158,7 +158,8 @@ func configDoc(in Input) m {
 		// disable_healthcheck: Authelia would otherwise write a helper file
 		// into /app, which is impossible on the read-only root filesystem.
 		// compose.yml probes /api/health instead.
-		"server": m{"address": "tcp://:9091/", "disable_healthcheck": true},
+		// asset_path: the brand's logo and favicon, written by Marineris.
+		"server": m{"address": "tcp://:9091/", "disable_healthcheck": true, "asset_path": "/config/assets/"},
 		"log":    m{"level": "info", "format": "json"},
 		"theme":  "dark",
 		"totp": m{
@@ -179,7 +180,9 @@ func configDoc(in Input) m {
 			"timeout":                           "60s",
 			"selection_criteria": m{
 				"user_verification": "preferred",
-				"discoverability":   "preferred",
+				// Passkey sign-in has no username: the passkey must tell
+				// Authelia whose it is (discoverable credential).
+				"discoverability": "required",
 			},
 		},
 		"authentication_backend": m{

@@ -149,7 +149,9 @@
     </div>
     {#if passkeysSupported()}
       <div class="row mt">
-        <input class="w-full" bind:value={passkeyName} placeholder="Name, e.g. “MacBook Touch ID”" maxlength="64" />
+        <!-- A label, not a credential: password managers must not offer to fill it. -->
+        <input class="w-full" bind:value={passkeyName} placeholder="Name, e.g. “MacBook Touch ID”" maxlength="64"
+          autocomplete="off" data-protonpass-ignore="true" data-1p-ignore data-bwignore data-lpignore="true" />
         <button class="primary" onclick={addPasskey}>Add passkey</button>
       </div>
     {:else}
@@ -210,7 +212,9 @@
     <form id="totp-form" onsubmit={finishTOTP}>
       <div class="field">
         <label for="tc">Code from the new authenticator</label>
-        <input id="tc" inputmode="numeric" bind:value={totpCode} required maxlength="7" />
+        <!-- The new authenticator's code: a saved one would be the old one. -->
+        <input id="tc" inputmode="numeric" bind:value={totpCode} required maxlength="7"
+          autocomplete="off" data-protonpass-ignore="true" data-1p-ignore data-bwignore data-lpignore="true" />
       </div>
     </form>
   {/if}

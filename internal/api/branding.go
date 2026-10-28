@@ -159,6 +159,8 @@ func (s *Server) handleBrandingAssetPut(w http.ResponseWriter, r *http.Request, 
 		return err
 	}
 	s.audit(r, rc, "branding."+a, "", true, ct)
+	// The Authelia portal shows the same logo and favicon.
+	s.applyAsync(rc.actor(), "branding", true, false)
 	return s.handleBrandingGet(w, r, rc)
 }
 
@@ -171,5 +173,6 @@ func (s *Server) handleBrandingAssetDelete(w http.ResponseWriter, r *http.Reques
 		return err
 	}
 	s.audit(r, rc, "branding."+a, "", true, "reset to default")
+	s.applyAsync(rc.actor(), "branding", true, false)
 	return s.handleBrandingGet(w, r, rc)
 }
