@@ -26,11 +26,34 @@ Installed once, for the user the runner runs as:
 Go, Node, Trivy, cosign and the browser itself are installed by the jobs, in
 the runner's tool cache or temporary folder.
 
+## More runners: jobs in parallel
+
+One runner runs one job at a time. Several runners on the same machine run a
+pull request's jobs in parallel again (the jobs pick free ports, so they do
+not collide). Each runner is a folder of its own, for the same `gh-runner`
+user; in **Settings → Actions → Runners → New self-hosted runner**, copy the
+download URL and the token, then for runner 2:
+
+```sh
+sudo -u gh-runner -H bash -c '
+  mkdir ~/actions-runner-2 && cd ~/actions-runner-2 &&
+  curl -fsSL -o runner.tar.gz <download URL> && tar xzf runner.tar.gz && rm runner.tar.gz &&
+  ./config.sh --unattended --url https://github.com/PhotonRing/Marineris-Server \
+    --token <token> --name marineris-2 --labels self-hosted'
+cd /home/gh-runner/actions-runner-2 && sudo ./svc.sh install gh-runner && sudo ./svc.sh start
+```
+
+About as many runners as the machine has cores divided by four works well:
+the Go builds and tests already use every core of the machine (Go compiles
+in parallel by itself), and the browser tests run one after the other by
+design (each one continues the previous one's state).
+
 ## Good to know
 
-- One runner runs one job at a time: GitHub runs a pull request's jobs in
-  parallel, the runner one after the other. Registering more runners on the
-  same machine (each in its own folder) runs them in parallel again.
+- A runner keeps the `PATH` of the user who configured it in its `.path`
+  file. After moving a runner to another user, reset it, then restart the
+  runner:
+  `echo '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' | sudo -u gh-runner tee ~gh-runner/actions-runner/.path`
 - The release job builds both architectures with QEMU: it registers QEMU's
   binary formats on the host (`docker/setup-qemu-action`).
 - Images and build caches accumulate; prune them from time to time:
