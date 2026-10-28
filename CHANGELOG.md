@@ -4,6 +4,12 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+**Versions before 1.0 follow the roadmap phases:** the minor number is the
+phase (0.1.x = Phase 1, 0.2.0 starts Phase 2) and patch releases bring
+features and fixes within the phase. 1.0.0 will mark a stable, complete
+platform; from then on the usual rules apply (minor = features, patch =
+fixes, major = breaking changes).
+
 **Releasing is automatic:** move the entries of *Unreleased* to a new
 `## [X.Y.Z] - date` section and merge to `main`. The release workflow sees the
 new version, runs the full test suite, publishes the signed images, creates the
@@ -11,6 +17,18 @@ tag `vX.Y.Z` and the GitHub release — whose body is that section, followed by
 the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
+
+## [0.1.1] - 2026-10-28
+
+Phase 1, continued: a stack editor, branding, administrators-only routes and a
+clearer view of the proxy and single sign-on.
+
+**Upgrading from 0.1.0:** in `.env`, set `MARINERIS_IMAGE` and
+`MARINERIS_CADDY_IMAGE` to the `0.1.1` tags, then
+`docker compose pull && docker compose up -d` (see the
+[upgrade runbook](https://github.com/PhotonRing/Marineris-Server/blob/main/docs/runbooks/upgrade.md)). The database is
+migrated automatically. Note that the public Marineris UI host is now limited
+to Authelia's `admins` group, which every existing account belongs to.
 
 ### Added
 
@@ -110,5 +128,6 @@ First public version: Phase 1.
   the real stack with a test ACME CA, gitleaks, govulncheck, Trivy, CodeQL,
   OWASP ZAP; multi-arch signed images with SBOM and provenance.
 
-[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/PhotonRing/Marineris-Server/releases/tag/v0.1.0
