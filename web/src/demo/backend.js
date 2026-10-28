@@ -329,8 +329,9 @@ const routes = [
     if (b.stack) {
       const s = db.stacks.find((x) => x.name === b.stack);
       if (!s) return notFound();
-      url = db.serviceIcons.get(`${s.name}/${b.service || stackServices(s).main}`);
-      if (!url) return fail(400, 'invalid', 'stack: this stack or service has no icon of its own', { field: 'stack' });
+      const sum = stackServices(s);
+      url = sum.services.find((v) => v.name === (b.service || sum.main))?.icon;
+      if (!url) return fail(400, 'invalid', 'stack: this stack or service has no icon', { field: 'stack' });
     } else if (b.name) {
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(b.name)) return fail(400, 'bad_request', "icons: an icon name uses lowercase letters, digits and '-'");
       url = `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${b.name}.png`;
@@ -541,7 +542,7 @@ const routes = [
     const out = [];
     for (const s of db.stacks) {
       for (const v of stackServices(s).services) {
-        if (v.icon_source !== 'custom') continue;
+        if (!v.icon) continue; // its own icon or its route's
         if (v.main) out.push({ stack: s.name, icon: v.icon });
         out.push({ stack: s.name, service: v.name, icon: v.icon });
       }

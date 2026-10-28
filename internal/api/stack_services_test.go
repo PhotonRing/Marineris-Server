@@ -154,10 +154,22 @@ func TestStackRenameAndRouteIcons(t *testing.T) {
 	if r := admin.do("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "helper"}); r.Status != http.StatusBadRequest {
 		t.Fatalf("service without an icon: %d %s", r.Status, r.Raw)
 	}
+	if r := admin.do("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "nope"}); r.Status != http.StatusBadRequest {
+		t.Fatalf("unknown service: %d %s", r.Status, r.Raw)
+	}
 	must("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "jellyfin"})
 	if r := must("GET", fmt.Sprintf("/api/hub/icons/%d", routeID), nil); r.Header.Get("Content-Type") != "image/png" {
 		t.Fatalf("route icon copied from the service: %v", r.Header)
 	}
+	// A service whose icon comes from its route is offered too, and copied.
+	helper := must("POST", "/api/routes", map[string]any{"name": "helper", "host": "helper.example.com", "kind": "container",
+		"target": map[string]any{"container": "media-helper-1", "port": 80}, "auth": "none", "enabled": true})
+	helperID := int64(helper.Body["id"].(float64))
+	must("PUT", fmt.Sprintf("/api/routes/%d/icon", helperID), map[string]string{"data": pngPixel})
+	if icons := must("GET", "/api/stack-icons", nil); !strings.Contains(string(icons.Raw), `"stack":"media","service":"helper"`) {
+		t.Fatalf("a service with its route's icon is not offered: %s", icons.Raw)
+	}
+	must("PUT", fmt.Sprintf("/api/routes/%d/icon", routeID), map[string]string{"stack": "media", "service": "helper"})
 
 	// Rename: refused names and conflicts first.
 	must("POST", "/api/stacks", map[string]any{"name": "other", "compose": testCompose})

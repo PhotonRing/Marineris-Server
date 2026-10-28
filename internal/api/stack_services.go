@@ -59,6 +59,7 @@ type serviceView struct {
 	Main       bool               `json:"main"`
 	Icon       string             `json:"icon"`
 	IconSource string             `json:"icon_source"` // "", "custom" or "route"
+	iconRoute  int64              // the route whose icon it is (IconSource "route")
 	State      string             `json:"state"`
 	Containers []docker.Container `json:"containers"`
 }
@@ -127,7 +128,7 @@ func (s *Server) stackServices(ctx context.Context, st *store.Stack, containers 
 				}
 				if v.Icon == "" && rt.Hub.HasIcon {
 					v.Icon = "/api/hub/icons/" + strconv.FormatInt(rt.ID, 10) + "?v=" + strconv.FormatInt(rt.UpdatedAt.Unix(), 10)
-					v.IconSource = "route"
+					v.IconSource, v.iconRoute = "route", rt.ID
 				}
 			}
 		}
@@ -665,7 +666,8 @@ type stackIcon struct {
 	Icon    string `json:"icon"`
 }
 
-// handleStackIcons lists the custom icons of the stacks and their services.
+// handleStackIcons lists the icons of the stacks and their services, their
+// own or the one of the route that publishes them.
 func (s *Server) handleStackIcons(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
 	ctx := r.Context()
 	list, err := s.Store.ListStacks(ctx)
@@ -680,7 +682,7 @@ func (s *Server) handleStackIcons(w http.ResponseWriter, r *http.Request, rc *re
 			continue
 		}
 		for _, v := range sum.Services {
-			if v.IconSource != "custom" {
+			if v.Icon == "" {
 				continue
 			}
 			if v.Main {
@@ -692,23 +694,35 @@ func (s *Server) handleStackIcons(w http.ResponseWriter, r *http.Request, rc *re
 	return ok(w, out)
 }
 
-// serviceIconFor returns the custom icon of a stack's service, or of its
-// main service when service is empty.
+// serviceIconFor returns the icon of a stack's service (its own, or the one
+// of the route that publishes it), or of its main service when service is
+// empty.
 func (s *Server) serviceIconFor(ctx context.Context, stack, service string) (*store.Image, error) {
 	st, err := s.Store.GetStack(ctx, stack)
 	if err != nil {
 		return nil, err
 	}
+	sum, err := s.stackServices(ctx, st, s.listContainers(ctx))
+	if err != nil {
+		return nil, err
+	}
 	if service == "" {
-		sum, err := s.stackServices(ctx, st, s.listContainers(ctx))
-		if err != nil {
-			return nil, err
-		}
 		service = sum.Main
 	}
-	im, err := s.Store.GetImage(ctx, store.ImageService, st.Name+"/"+service)
-	if errors.Is(err, store.ErrNotFound) {
-		return nil, fieldError("stack", "this stack or service has no icon of its own")
+	for _, v := range sum.Services {
+		if v.Name != service {
+			continue
+		}
+		switch v.IconSource {
+		case "custom":
+			return s.Store.GetImage(ctx, store.ImageService, st.Name+"/"+service)
+		case "route":
+			ic, err := s.Store.GetRouteIcon(ctx, v.iconRoute)
+			if err != nil {
+				return nil, err
+			}
+			return &store.Image{ContentType: ic.ContentType, Data: ic.Data}, nil
+		}
 	}
-	return im, err
+	return nil, fieldError("stack", "this stack or service has no icon")
 }

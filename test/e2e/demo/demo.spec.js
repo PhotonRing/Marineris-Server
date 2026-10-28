@@ -217,6 +217,9 @@ test('a route reuses the icon of a stack service', async ({ page }) => {
   await page.getByLabel('Container', { exact: true }).selectOption('jellyseerr');
   await expect(page.getByLabel('Icon', { exact: true })).toHaveValue('stack');
   await expect(page.getByLabel('Stack or service whose icon to use')).toHaveValue('media/jellyseerr');
+  // Services whose icon comes from their route are offered too, and the stack itself.
+  const choices = await page.getByLabel('Stack or service whose icon to use').locator('option').allTextContents();
+  expect(choices).toEqual(expect.arrayContaining(['media (stack)', 'media › jellyfin', 'media › jellyseerr', 'monitoring (stack)', 'monitoring › uptime-kuma']));
   await page.getByLabel('Subdomain').fill('requests');
   await page.getByRole('button', { name: 'Save & apply' }).click();
   await page.getByRole('link', { name: 'Hub', exact: true }).click();

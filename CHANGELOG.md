@@ -18,6 +18,18 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-28
+
+**Upgrading from 0.1.2:** in `.env`, set `MARINERIS_IMAGE` and
+`MARINERIS_CADDY_IMAGE` to the `0.1.3` tags, then
+`docker compose pull && docker compose up -d`.
+
+### Fixed
+
+- Route icon → "Same as a stack or service" only offered services with an
+  icon of their own. Services whose icon comes from the route that publishes
+  them (and their stack, when it is the main service) are offered too.
+
 ## [0.1.2] - 2026-10-28
 
 Stacks you can rename, routes that reuse the icons of your stacks, and stack
@@ -170,7 +182,8 @@ First public version: Phase 1.
   the real stack with a test ACME CA, gitleaks, govulncheck, Trivy, CodeQL,
   OWASP ZAP; multi-arch signed images with SBOM and provenance.
 
-[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/PhotonRing/Marineris-Server/releases/tag/v0.1.0
