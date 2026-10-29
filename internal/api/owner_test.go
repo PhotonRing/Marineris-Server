@@ -158,7 +158,7 @@ func TestOwnershipHandover(t *testing.T) {
 		t.Fatalf("to a non-Administrator: %d %s", r.Status, r.Raw)
 	}
 	owner.do("POST", userPath(e.userID("dave"), "/disable"), nil)
-	if r := handover(owner, e.userID("dave")); r.Status != 409 || r.code() != "user_disabled" {
+	if r := handover(owner, e.userID("dave")); r.Status != 409 || r.code() != "target_disabled" {
 		t.Fatalf("to a Disabled User: %d %s", r.Status, r.Raw)
 	}
 	if r := handover(owner, e.userID(testUser)); r.Status != 409 || r.code() != "self" {

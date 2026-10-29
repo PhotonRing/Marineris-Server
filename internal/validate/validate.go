@@ -23,6 +23,7 @@ var (
 	folderRE    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 	pathRE      = regexp.MustCompile(`^(/[A-Za-z0-9._~-]+)+$`)
 	nameRE      = regexp.MustCompile(`^[\p{L}\p{N}]([\p{L}\p{N} ._()-]{0,62}[\p{L}\p{N}._()-])?$`)
+	personRE    = regexp.MustCompile(`^[\p{L}\p{N}]([\p{L}\p{N} ._()'’-]{0,62}[\p{L}\p{N}._()'’-])?$`)
 	usernameRE  = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,31}$`)
 	localPartRE = regexp.MustCompile(`^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*$`)
 	asciiHostRE = regexp.MustCompile(`^[A-Za-z0-9.-]+$`)
@@ -134,11 +135,21 @@ func GroupName(n string) error {
 	return nil
 }
 
-// DisplayName validates a human-readable name: a User's, a route's, a DNS
-// profile's or a passkey's. Spaces only inside.
+// DisplayName validates a human-readable name: a route's, a DNS profile's or
+// a passkey's. Spaces only inside.
 func DisplayName(n string) error {
 	if !nameRE.MatchString(n) {
 		return errors.New("must be 1-64 characters: letters, digits, spaces, '.', '_', '(', ')' or '-', starting with a letter or digit")
+	}
+	return nil
+}
+
+// UserDisplayName validates a User's display name: DisplayName's characters
+// plus the apostrophe (' or ’) that people's names carry (O'Brien). Authelia's
+// users file is written by a YAML encoder, which quotes it.
+func UserDisplayName(n string) error {
+	if !personRE.MatchString(n) {
+		return errors.New("must be 1-64 characters: letters, digits, spaces, apostrophes, '.', '_', '(', ')' or '-', starting with a letter or digit")
 	}
 	return nil
 }

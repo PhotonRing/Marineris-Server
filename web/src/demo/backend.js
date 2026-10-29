@@ -658,7 +658,7 @@ const routes = [
   ['PUT', '/api/users/{id}', (p, b) => withUser(p, (u) => {
     if ('username' in b) return fail(400, 'bad_request', 'invalid request body: unknown field "username"');
     const name = (b.display_name || '').trim();
-    if (!/^[\p{L}\p{N}]([\p{L}\p{N} ._()-]{0,62}[\p{L}\p{N}._()-])?$/u.test(name)) return fail(400, 'invalid', "display_name: must be 1-64 characters: letters, digits, spaces, '.', '_', '(', ')' or '-', starting with a letter or digit", { field: 'display_name' });
+    if (!/^[\p{L}\p{N}]([\p{L}\p{N} ._()'’-]{0,62}[\p{L}\p{N}._()'’-])?$/u.test(name)) return fail(400, 'invalid', "display_name: must be 1-64 characters: letters, digits, spaces, apostrophes, '.', '_', '(', ')' or '-', starting with a letter or digit", { field: 'display_name' });
     const email = (b.email || '').trim();
     if (email && !/^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(email)) return fail(400, 'invalid', 'email: must be an e-mail address like name@example.com', { field: 'email' });
     Object.assign(u, { display_name: name, email, updated_at: iso() });
@@ -749,7 +749,7 @@ const routes = [
     if (!u) return notFound();
     if (u.id === ownerID()) return fail(409, 'self', 'you cannot do this to your own User');
     if (!u.groups.includes('admins')) return fail(409, 'not_administrator', 'only Administrators can be Proxy & SSO Administrators or the Owner');
-    if (u.disabled) return fail(409, 'user_disabled', 'a Disabled User cannot become the Owner');
+    if (u.disabled) return fail(409, 'target_disabled', 'a Disabled User cannot become the Owner');
     db.ownerID = u.id;
     db.session.rights.owner = false;
     audit('owner.transfer', u.username, 'from admin');

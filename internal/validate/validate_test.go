@@ -80,6 +80,16 @@ func TestNames(t *testing.T) {
 			t.Errorf("display name %q accepted", n)
 		}
 	}
+	for _, n := range []string{"O'Brien", "D’Artagnan", "Théo", "Jean-Luc (home)"} {
+		if err := UserDisplayName(n); err != nil {
+			t.Errorf("User display name %q rejected: %v", n, err)
+		}
+	}
+	for _, n := range []string{"", "'lead", " lead", "trail ", "<script>", "a\"b", "a\nb", strings.Repeat("x", 65)} {
+		if UserDisplayName(n) == nil {
+			t.Errorf("User display name %q accepted", n)
+		}
+	}
 	for _, g := range []string{"family", "f2", "team_a-b", "1st", strings.Repeat("a", 32)} {
 		if err := GroupName(g); err != nil {
 			t.Errorf("group %q rejected: %v", g, err)
@@ -227,6 +237,21 @@ func FuzzUsername(f *testing.F) {
 			assertInert(t, s)
 			if s != strings.ToLower(s) {
 				t.Fatalf("uppercase Username accepted: %q", s)
+			}
+		}
+	})
+}
+
+func FuzzUserDisplayName(f *testing.F) {
+	f.Add("O'Brien")
+	f.Add("D’Artagnan")
+	f.Add("a\"b")
+	f.Fuzz(func(t *testing.T, s string) {
+		if UserDisplayName(s) == nil {
+			// Apostrophes are the one addition to DisplayName's characters.
+			assertInert(t, strings.NewReplacer(" ", "", "'", "").Replace(s))
+			if s != strings.TrimSpace(s) || strings.IndexFunc(s, unicode.IsControl) >= 0 {
+				t.Fatalf("unsafe User display name accepted: %q", s)
 			}
 		}
 	})

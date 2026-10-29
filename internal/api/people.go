@@ -82,7 +82,7 @@ var errResetPending = &Error{Status: http.StatusForbidden, Code: "reset_pending"
 
 func cleanDisplayName(v string) (string, error) {
 	v = strings.TrimSpace(v)
-	if err := validate.DisplayName(v); err != nil {
+	if err := validate.UserDisplayName(v); err != nil {
 		return "", fieldError("display_name", err.Error())
 	}
 	return v, nil

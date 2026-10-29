@@ -20,7 +20,7 @@ var (
 		Message: "admins cannot lose its last member"}
 	errOwnerAdministrator = &Error{Status: http.StatusConflict, Code: "owner_administrator",
 		Message: "the Owner stays an Administrator; hand ownership over first"}
-	errUserDisabled = &Error{Status: http.StatusConflict, Code: "user_disabled",
+	errUserDisabled = &Error{Status: http.StatusConflict, Code: "target_disabled",
 		Message: "a Disabled User cannot become the Owner"}
 	errOwnerChanged = &Error{Status: http.StatusConflict, Code: "owner_changed",
 		Message: "ownership changed meanwhile; reload and try again"}
