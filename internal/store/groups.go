@@ -69,21 +69,8 @@ func (s *Store) SetUserCustomGroups(ctx context.Context, userID int64, names []s
 			}
 			want[n] = true
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT g.name FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = ? AND g.builtin = 0`, userID)
+		current, err := customGroupsOf(ctx, tx, userID)
 		if err != nil {
-			return err
-		}
-		var current []string
-		for rows.Next() {
-			var n string
-			if err := rows.Scan(&n); err != nil {
-				rows.Close()
-				return err
-			}
-			current = append(current, n)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
 			return err
 		}
 		for _, n := range current {
@@ -100,6 +87,26 @@ func (s *Store) SetUserCustomGroups(ctx context.Context, userID int64, names []s
 		}
 		return nil
 	})
+}
+
+// customGroupsOf returns the names of the custom groups a user belongs to.
+// The rows are closed on return, before the caller runs further statements
+// in the same transaction.
+func customGroupsOf(ctx context.Context, tx *sql.Tx, userID int64) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT g.name FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = ? AND g.builtin = 0`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		names = append(names, n)
+	}
+	return names, rows.Err()
 }
 
 // ErrBuiltinGroup: the change concerns a built-in group, which this path
