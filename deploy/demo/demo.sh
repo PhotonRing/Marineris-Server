@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs the whole Marineris stack on this computer, to try the current code
-# without a server: Marineris, Caddy, Authelia, CrowdSec and the socket proxy.
+# without a server: Marineris, Caddy, Authelia (and Valkey, its session
+# store), CrowdSec and the socket proxy.
 # Needs Linux (or WSL 2 on Windows) with Docker and its compose plugin;
 # nothing else (no Go, no sudo).
 #
@@ -104,7 +105,7 @@ up() {
   # shellcheck disable=SC2086
   docker run --rm -v "$BASE:/base" $HELPER -c '
     set -e
-    for d in "" stacks static authelia authelia-notify authelia-data secrets; do
+    for d in "" stacks static authelia authelia-notify authelia-data authelia-sessions secrets; do
       install -d -o 65532 -g 65532 -m 0700 "/base/$1/$d"
     done' sh "${DATA##*/}"
 

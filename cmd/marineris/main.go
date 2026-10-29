@@ -22,6 +22,7 @@ import (
 
 	"github.com/photonring/marineris-server/internal/api"
 	"github.com/photonring/marineris-server/internal/auth"
+	"github.com/photonring/marineris-server/internal/authelia"
 	"github.com/photonring/marineris-server/internal/caddy"
 	"github.com/photonring/marineris-server/internal/certs"
 	"github.com/photonring/marineris-server/internal/config"
@@ -90,11 +91,17 @@ func prepare(cfg *config.Config) error {
 		return err
 	}
 	// Authelia (same UID) writes its notifications and database here;
-	// Marineris reads the notifications.
-	for _, d := range []string{"authelia-notify", "authelia-data"} {
+	// Marineris reads the notifications. Valkey (same UID) keeps Authelia's
+	// sessions in authelia-sessions.
+	for _, d := range []string{"authelia-notify", "authelia-data", "authelia-sessions"} {
 		if err := os.MkdirAll(filepath.Join(cfg.DataDir, d), 0o700); err != nil {
 			return err
 		}
+	}
+	// Before Authelia and Valkey start: Valkey mounts its password file, and
+	// Docker would create a missing one as a directory.
+	if err := authelia.EnsureSecrets(cfg.AutheliaSecrets()); err != nil {
+		return err
 	}
 	if _, err := secrets.LoadOrCreateKey(cfg.MasterKeyPath()); err != nil {
 		return err

@@ -18,6 +18,21 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Editing a route signed everyone out.** Authelia kept sign-ins in its
+  memory, and every change to its configuration restarts it: creating,
+  editing or deleting a protected route, adding a domain, changing the
+  public address, upgrading. Its sessions now live in **Valkey**, a small
+  session store next to it, saved to disk: signing in survives Authelia's
+  restarts, Valkey's own and the server's, until the usual 30 min of
+  inactivity or 12 h. Valkey is reachable by Authelia only, with a generated
+  password, and runs as hardened as the rest of the stack.
+
+**Upgrading:** nothing to do by hand: the new compose file adds Valkey, and
+`marineris-init` creates its password and data folder. Everyone signs in
+once more after the upgrade.
+
 ## [0.1.9] - 2026-10-28
 
 Passkeys are added from the UI.

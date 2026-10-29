@@ -51,6 +51,12 @@ func TestRenderSecureDefaults(t *testing.T) {
 			t.Fatalf("weak rule %v", r)
 		}
 	}
+	// Sessions in Valkey (they survive Authelia's restarts); its password
+	// comes from a file, like the other secrets.
+	sess := doc["session"].(map[string]any)["redis"].(map[string]any)
+	if sess["host"] != SessionStoreHost || sess["port"] != 6379 || sess["password"] != nil {
+		t.Fatalf("session store: %v", sess)
+	}
 	if !strings.Contains(string(cfg), "enable_passkey_login: true") {
 		t.Fatal("passkey login not enabled")
 	}
@@ -178,7 +184,7 @@ func TestAutheliaValidateConfig(t *testing.T) {
 			_ = os.Mkdir(filepath.Join(dir, "assets"), 0o755)
 			sec := filepath.Join(dir, "secrets")
 			_ = os.Mkdir(sec, 0o755)
-			for _, f := range []string{"jwt", "session", "storage"} {
+			for _, f := range []string{"jwt", "session", "storage", SessionStorePasswordFile} {
 				_ = os.WriteFile(filepath.Join(sec, f), []byte(strings.Repeat("x", 64)), 0o644)
 			}
 			out, err := exec.Command("docker", append([]string{"run", "--rm",

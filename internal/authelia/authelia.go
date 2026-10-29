@@ -24,6 +24,9 @@ import (
 // configured, so Authelia can start (and stay unreachable) during setup.
 const PlaceholderDomain = "marineris-setup.internal"
 
+// SessionStoreHost is Valkey, Authelia's session store (compose.yml).
+const SessionStoreHost = "valkey"
+
 // Paths inside the Authelia container.
 const (
 	UsersFile        = "/config/users_database.yml"
@@ -217,6 +220,10 @@ func configDoc(in Input) m {
 			"expiration":  "12h",
 			"remember_me": -1,
 			"cookies":     cookies,
+			// Sessions live in Valkey, not in Authelia's memory: restarting
+			// Authelia (every configuration change, upgrades) keeps everyone
+			// signed in.
+			"redis": m{"host": SessionStoreHost, "port": 6379},
 		},
 		// Actions that need a confirmed identity (registering a passkey in
 		// the portal) rely on the second factor of the sign-in instead of a
