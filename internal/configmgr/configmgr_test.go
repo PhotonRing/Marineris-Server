@@ -326,6 +326,58 @@ func TestAutheliaUsersFileFollowsGroups(t *testing.T) {
 	}
 }
 
+// The UI behind Authelia opens for every signed-in User: non-Administrators
+// see their Hub and Account there, and the API refuses them everything else.
+// Administrators-only routes stay closed to them in Authelia.
+func TestAutheliaLetsEveryUserReachTheUI(t *testing.T) {
+	m, st, _, _ := setup(t)
+	ctx := context.Background()
+	if _, err := st.UpdateSettings(ctx, func(s *store.Settings) error {
+		s.UIProtectWithAuthelia = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateRoute(ctx, &store.Route{Name: "ops", Host: "ops.example.com", Kind: store.RouteContainer,
+		Target: store.RouteTarget{Container: "web", Port: 80}, Auth: store.AuthAdmins, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.EnsureAutheliaFiles(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ApplyAuthelia(ctx, "admin", "ui"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(m.cfg.AutheliaDir(), "configuration.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		AccessControl struct {
+			Rules []struct {
+				Domain  []string `yaml:"domain"`
+				Policy  string   `yaml:"policy"`
+				Subject []string `yaml:"subject"`
+			} `yaml:"rules"`
+		} `yaml:"access_control"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range doc.AccessControl.Rules {
+		got = append(got, fmt.Sprintf("%v %s %v", r.Domain, r.Policy, r.Subject))
+	}
+	want := []string{
+		"[marineris.example.com] two_factor []",
+		"[ops.example.com] two_factor [group:admins]",
+		"[ops.example.com] deny []",
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("access rules:\n got  %v\n want %v", got, want)
+	}
+}
+
 func TestApplyAutheliaInvalidKeepsFiles(t *testing.T) {
 	m, _, _, fd := setup(t)
 	ctx := context.Background()

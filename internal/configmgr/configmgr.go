@@ -286,9 +286,10 @@ func (m *Manager) AutheliaInput(ctx context.Context) (authelia.Input, error) {
 			in.Protected = append(in.Protected, authelia.Resource{Host: r.Host, PathPrefix: r.PathPrefix, AdminOnly: r.Auth == store.AuthAdmins})
 		}
 	}
-	// Only administrators have any business on the Marineris UI.
+	// Every User opens the UI (their Hub and Account); the API decides what
+	// each may do there (routes.go).
 	if st.UIHost != "" && st.UIProtectWithAuthelia {
-		in.Protected = append(in.Protected, authelia.Resource{Host: st.UIHost, AdminOnly: true})
+		in.Protected = append(in.Protected, authelia.Resource{Host: st.UIHost})
 	}
 	users, err := m.store.ListUsers(ctx)
 	if err != nil {
