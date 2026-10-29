@@ -16,7 +16,6 @@
   let totp = $state(null);
   let totpCode = $state('');
   let totpOpen = $state(false);
-  let notification = $state(null);
 
   const portalHost = $derived(app.meta.portal_url ? new URL(app.meta.portal_url).host : '');
 
@@ -129,14 +128,6 @@
     try {
       await post('/api/account/sessions/revoke-others');
       toast('All other sessions were logged out');
-    } catch (err) {
-      toast(describe(err), 'error');
-    }
-  }
-
-  async function loadNotification() {
-    try {
-      notification = await get('/api/authelia/notification');
     } catch (err) {
       toast(describe(err), 'error');
     }
@@ -255,24 +246,6 @@
       <button onclick={newCodes}>New recovery codes</button>
       <button onclick={revokeOthers}>Log out other sessions</button>
     </div>
-  </div>
-
-  <div class="card">
-    <h2>Authelia messages</h2>
-    <p class="small muted">
-      Your password and authenticator app also sign you in to the Authelia portal: Marineris registers them there.
-      For some actions in the portal, Authelia asks for a one-time code that it would e-mail; Marineris shows that
-      message here. Passkeys added on this page need none.
-    </p>
-    <button onclick={loadNotification}>Show latest message</button>
-    {#if notification}
-      {#if notification.present}
-        <p class="small muted mt">Written {new Date(notification.modified_at).toLocaleString()}</p>
-        <pre>{notification.content}</pre>
-      {:else}
-        <p class="muted mt">No message yet.</p>
-      {/if}
-    {/if}
   </div>
 </div>
 
