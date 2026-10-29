@@ -57,7 +57,7 @@
   }
 
   async function done() {
-    setSession(result);
+    await setSession(result);
     await loadMeta();
   }
 </script>

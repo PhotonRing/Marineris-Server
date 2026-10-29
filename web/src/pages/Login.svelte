@@ -36,7 +36,7 @@
       const body = { mfa_token: mfaToken };
       if (useRecovery) body.recovery_code = code.trim();
       else body.code = code.trim();
-      setSession(await post('/api/auth/login/mfa', body));
+      await setSession(await post('/api/auth/login/mfa', body));
     } catch (err) {
       error = describe(err);
       if (err.code === 'mfa_expired') mfaToken = '';
