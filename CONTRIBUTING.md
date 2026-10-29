@@ -45,5 +45,9 @@ cd web && npm run dev
 Releases are automatic: see the top of [CHANGELOG.md](CHANGELOG.md). After a
 release, the workflow deletes every branch whose work is already in `main`.
 
+When a release changes what the hub looks like, regenerate the README's
+picture from the demo: `npm run build:demo` in `web/`, then
+`npm run screenshots` in `test/e2e/` (it writes `docs/images/hub.webp`).
+
 By contributing you agree that your contributions are licensed under the
 AGPL-3.0.
