@@ -118,6 +118,19 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
+	return newEnvWith(t, nil)
+}
+
+// testBox is the master key box of every test server.
+func testBox() *secrets.Box {
+	box, _ := secrets.NewBox(bytes.Repeat([]byte{4}, 32))
+	return box
+}
+
+// newEnvWith starts a test server; seed, when set, first writes the database
+// file the server then opens (an older schema, for upgrade tests).
+func newEnvWith(t *testing.T, seed func(dbPath string)) *env {
+	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	cfg, err := config.LoadFrom(func(k string) string {
@@ -129,12 +142,15 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if seed != nil {
+		seed(cfg.DBPath())
+	}
 	st, err := store.Open(ctx, cfg.DBPath())
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	box, _ := secrets.NewBox(bytes.Repeat([]byte{4}, 32))
+	box := testBox()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	fc, fd, fap := &fakeCaddy{}, &fakeDocker{}, &fakeAutheliaPasskeys{}
 	cm := configmgr.New(cfg, st, box, fc, fd, log)

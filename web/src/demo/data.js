@@ -33,7 +33,7 @@ function container(n, name, image, extra = {}) {
 }
 
 export function seed() {
-  const admin = { id: 1, username: 'admin', role: 'admin', created_at: ago(43200), updated_at: ago(43200) };
+  const admin = { id: 1, username: 'admin', display_name: 'admin', email: '', disabled: false, groups: ['admins'], created_at: ago(43200), updated_at: ago(43200) };
   const containers = [
     container(1, 'marineris', 'ghcr.io/photonring/marineris:0.1.0', { health: 'healthy', status: 'Up 3 days (healthy)', ports: [8080, 8081], stack: 'marineris', service: 'marineris', networks: ['marineris_auth', 'marineris_docker-api', 'marineris_outbound', 'marineris_ui'], system: true }),
     container(2, 'marineris-caddy', 'ghcr.io/photonring/marineris-caddy:0.1.0', { ports: [80, 443, 2019], stack: 'marineris', service: 'caddy', networks: ['marineris-apps', 'marineris_auth', 'marineris_crowdsec', 'marineris_edge', 'marineris_ui'], system: true }),
@@ -61,6 +61,7 @@ export function seed() {
     session: {
       auth_at: ago(5), csrf_token: 'demo', expires_at: new Date(now + 12 * 3600000).toISOString(),
       method: 'passkey', step_up_ok: true, user: admin,
+      rights: { administrator: true, proxy_admin: false, owner: true },
     },
     settings: {
       setup_complete: true, acme_email: 'admin@mars.example', acme_staging: false, acme_directory: '', acme_trusted_root_file: '',

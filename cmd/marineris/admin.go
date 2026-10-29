@@ -19,7 +19,7 @@ const adminHelp = `Break-glass administration. Run inside the Marineris containe
   docker exec -it marineris marineris admin <command>
 
 Commands:
-  users                       list administrators
+  users                       list users with their groups, the owner and their state
   reset-password <user>       set a new random password (printed once) and revoke sessions
   reset-mfa <user>            enrol a new TOTP secret, issue new recovery codes, revoke sessions
   remove-passkeys <user>      delete every passkey of the user
@@ -27,6 +27,23 @@ Commands:
   setup-token                 print the first-run setup token (only before setup)
   disable-ui-authelia         stop protecting the public UI with Authelia (if Authelia is broken)
 `
+
+// userLine is one row of `admin users`: username, display name, Groups,
+// whether the user is the Owner, and their state.
+func userLine(u *store.User, ownerID int64) string {
+	groups := strings.Join(u.Groups, ",")
+	if groups == "" {
+		groups = "-"
+	}
+	owner, state := "", "active"
+	if u.ID == ownerID {
+		owner = "owner"
+	}
+	if u.Disabled {
+		state = "disabled"
+	}
+	return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\tcreated %s", u.Username, u.DisplayName, groups, owner, state, u.CreatedAt.Format(time.RFC3339))
+}
 
 func admin(args []string) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" {
@@ -60,8 +77,13 @@ func admin(args []string) error {
 		if err != nil {
 			return err
 		}
+		owner, err := a.store.OwnerID(ctx)
+		if err != nil {
+			return err
+		}
+		fmt.Println("USERNAME\tNAME\tGROUPS\tOWNER\tSTATE\tCREATED")
 		for _, u := range us {
-			fmt.Printf("%s\t%s\tcreated %s\n", u.Username, u.Role, u.CreatedAt.Format(time.RFC3339))
+			fmt.Println(userLine(u, owner))
 		}
 	case "reset-password":
 		u, err := user()
