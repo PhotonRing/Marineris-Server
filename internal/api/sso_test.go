@@ -71,7 +71,11 @@ func TestAutheliaSignInIsTheOnlySignIn(t *testing.T) {
 	// Another user signs in to Authelia in the same browser: the session
 	// becomes theirs.
 	ctx := context.Background()
-	if err := e.store.CreateUser(ctx, &store.User{Username: "bob", PasswordHash: "x", WebAuthnID: []byte("bob"), Role: "admin"}); err != nil {
+	bob := &store.User{Username: "bob", PasswordHash: "x", WebAuthnID: []byte("bob")}
+	if err := e.store.CreateUser(ctx, bob); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.AddGroupMember(ctx, bob.ID, store.GroupAdmins); err != nil {
 		t.Fatal(err)
 	}
 	c = e.edgeClient()

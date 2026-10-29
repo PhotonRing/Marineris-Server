@@ -295,8 +295,14 @@ func (m *Manager) AutheliaInput(ctx context.Context) (authelia.Input, error) {
 		return in, err
 	}
 	for _, u := range users {
+		email := u.Email
+		if email == "" {
+			// Users without an e-mail of their own get the server's.
+			email = st.ACMEEmail
+		}
 		in.Users = append(in.Users, authelia.User{
-			Username: u.Username, Email: st.ACMEEmail, PasswordHash: u.PasswordHash, Groups: []string{authelia.AdminsGroup},
+			Username: u.Username, DisplayName: u.DisplayName, Email: email, PasswordHash: u.PasswordHash,
+			Groups: u.Groups, Disabled: u.Disabled,
 		})
 	}
 	return in, nil

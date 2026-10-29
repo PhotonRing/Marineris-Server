@@ -54,7 +54,7 @@ type Input struct {
 }
 
 // AdminsGroup is the Authelia group of Marineris administrators.
-const AdminsGroup = "admins"
+const AdminsGroup = store.GroupAdmins
 
 // Resource is a host, optionally narrowed to a path prefix ("/app"), that
 // needs a two-factor login; AdminOnly restricts it to AdminsGroup.

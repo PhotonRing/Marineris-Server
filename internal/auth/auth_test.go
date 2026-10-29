@@ -209,7 +209,7 @@ func TestSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	u := &store.User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h"), Role: "admin"}
+	u := &store.User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h")}
 	if err := st.CreateUser(ctx, u); err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestSessionAbsoluteExpiry(t *testing.T) {
 	ctx := context.Background()
 	st, _ := store.OpenMemory(ctx)
 	defer st.Close()
-	u := &store.User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h"), Role: "admin"}
+	u := &store.User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h")}
 	_ = st.CreateUser(ctx, u)
 	now := time.Now().UTC()
 	sm := NewSessions(st, 30*time.Minute, time.Hour)

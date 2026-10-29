@@ -209,6 +209,48 @@ ALTER TABLE routes ADD COLUMN hub_icon_link TEXT NOT NULL DEFAULT '';
 	`
 ALTER TABLE users ADD COLUMN authelia_totp TEXT NOT NULL DEFAULT '';
 `,
+	// 6: users belong to groups instead of having a role; one user is the
+	// owner; invites and reset links. Every existing user was an
+	// administrator: they all join admins, and the oldest becomes owner.
+	`
+ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0;
+UPDATE users SET display_name = username;
+ALTER TABLE users DROP COLUMN role;
+CREATE TABLE groups (
+	id         INTEGER PRIMARY KEY,
+	name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+	builtin    INTEGER NOT NULL DEFAULT 0,
+	created_at TIMESTAMP NOT NULL
+);
+CREATE TABLE group_members (
+	user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+	PRIMARY KEY (user_id, group_id)
+);
+CREATE INDEX group_members_group ON group_members(group_id);
+INSERT INTO groups(name, builtin, created_at) VALUES ('admins', 1, CURRENT_TIMESTAMP), ('proxy-admins', 1, CURRENT_TIMESTAMP);
+INSERT INTO group_members(user_id, group_id) SELECT id, (SELECT id FROM groups WHERE name = 'admins') FROM users;
+INSERT INTO settings(key, value) SELECT 'owner_user_id', CAST(MIN(id) AS TEXT) FROM users HAVING COUNT(*) > 0;
+CREATE TABLE user_links (
+	id           INTEGER PRIMARY KEY,
+	kind         TEXT NOT NULL CHECK (kind IN ('invite', 'reset')),
+	token_hash   TEXT NOT NULL UNIQUE,
+	username     TEXT NOT NULL DEFAULT '' COLLATE NOCASE,
+	display_name TEXT NOT NULL DEFAULT '',
+	email        TEXT NOT NULL DEFAULT '',
+	groups       TEXT NOT NULL DEFAULT '[]',
+	user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+	resets       TEXT NOT NULL DEFAULT '',
+	created_by   TEXT NOT NULL,
+	created_at   TIMESTAMP NOT NULL,
+	expires_at   TIMESTAMP NOT NULL,
+	used_at      TIMESTAMP,
+	revoked_at   TIMESTAMP
+);
+CREATE INDEX user_links_user ON user_links(user_id);
+`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

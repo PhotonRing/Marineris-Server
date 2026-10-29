@@ -362,8 +362,18 @@ func (s *Server) handlePasskeyLoginFinish(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
+	owner, err := s.Store.OwnerID(r.Context())
+	if err != nil {
+		return err
+	}
 	return ok(w, map[string]any{
-		"user":       rc.user,
+		"user": rc.user,
+		// What the UI may offer; the API checks again on every request.
+		"rights": map[string]bool{
+			"administrator": rc.user.IsAdministrator(),
+			"proxy_admin":   rc.user.IsProxyAdmin(),
+			"owner":         owner == rc.user.ID,
+		},
 		"csrf_token": rc.session.CSRFToken,
 		"method":     rc.session.Method,
 		"auth_at":    rc.session.AuthAt,
