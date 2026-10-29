@@ -133,6 +133,7 @@ func (s *Server) table() []Route {
 		// The page opening Invites and Reset links, on the portal's host
 		{P, caddy.PortalLinkPath + "/api/read", Ticket, Anyone, false, s.handleLinkRead},
 		{P, caddy.PortalLinkPath + "/api/totp", Ticket, Anyone, false, s.handleLinkTOTP},
+		{P, caddy.PortalLinkPath + "/api/passkey", Ticket, Anyone, false, s.handleLinkPasskey},
 		{P, caddy.PortalLinkPath + "/api/finish", Ticket, Anyone, false, s.handleLinkFinish},
 
 		// Hub (app launcher) and system widgets

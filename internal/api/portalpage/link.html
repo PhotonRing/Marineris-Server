@@ -28,7 +28,27 @@
           <span>Type it again</span>
           <input id="password2" type="password" autocomplete="new-password" required />
         </label>
-        <fieldset>
+        <!-- Shown when a passkey may be the second factor instead. -->
+        <fieldset id="choice" hidden>
+          <legend>Second factor</legend>
+          <label class="choice">
+            <input type="radio" name="factor" value="totp" checked />
+            <span>Authenticator app</span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="factor" value="passkey" />
+            <span>Passkey</span>
+          </label>
+        </fieldset>
+        <fieldset id="passkey" hidden>
+          <legend>Passkey</legend>
+          <p class="small muted">Your browser or password manager creates it when you continue. It signs you in to every app and to Marineris.</p>
+          <label>
+            <span>Name (optional)</span>
+            <input id="passkey-name" type="text" maxlength="64" placeholder="Passkey" />
+          </label>
+        </fieldset>
+        <fieldset id="totp">
           <legend>Authenticator app</legend>
           <p class="small muted">Scan this code with your authenticator app, then type the 6-digit code it shows.</p>
           <img id="qr" class="qr" alt="Authenticator QR code" />

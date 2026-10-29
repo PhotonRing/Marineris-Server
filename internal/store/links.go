@@ -295,11 +295,19 @@ func (s *Store) CreateReset(ctx context.Context, l *Link, tokenHash string) erro
 
 // ResetChange is what using a Reset link sets: the new password hash when it
 // resets the password, the new sealed authenticator secret (with the step of
-// the code that confirmed it) when it resets the second factor.
+// the code that confirmed it) when it resets the second factor. A second
+// factor reset to a passkey (registered in Authelia, not here) sets Passkey
+// and no authenticator: the old one is removed.
 type ResetChange struct {
 	PasswordHash string
 	TOTPSecret   string
 	TOTPLastStep int64
+	Passkey      bool
+}
+
+// resetsSecondFactor reports whether the change sets a new second factor.
+func (c ResetChange) resetsSecondFactor() bool {
+	return c.TOTPSecret != "" || c.Passkey
 }
 
 // UseReset uses the pending Reset link l and sets what it resets, in one
@@ -307,7 +315,7 @@ type ResetChange struct {
 // factor replaces every old one: the recovery codes and the Marineris
 // passkeys go, and the authenticator must be registered in Authelia again.
 func (s *Store) UseReset(ctx context.Context, l *Link, c ResetChange) error {
-	if l.Kind != LinkReset || (l.ResetsPassword() != (c.PasswordHash != "")) || (l.ResetsSecondFactor() != (c.TOTPSecret != "")) {
+	if l.Kind != LinkReset || (l.ResetsPassword() != (c.PasswordHash != "")) || (l.ResetsSecondFactor() != c.resetsSecondFactor()) || (c.Passkey && c.TOTPSecret != "") {
 		return errors.New("store: the change does not match the Reset link")
 	}
 	now := s.now()
@@ -320,7 +328,7 @@ func (s *Store) UseReset(ctx context.Context, l *Link, c ResetChange) error {
 				return err
 			}
 		}
-		if c.TOTPSecret == "" {
+		if !c.resetsSecondFactor() {
 			return nil
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE users SET totp_secret = ?, totp_last_step = ?, authelia_totp = '', recovery_codes = '[]', updated_at = ? WHERE id = ?`,

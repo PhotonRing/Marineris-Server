@@ -135,6 +135,9 @@ type Server struct {
 	// linkTOTP holds the authenticator being set up through a link, per
 	// link ID (links_page.go).
 	linkTOTP map[int64]*totpPending
+	// linkPasskey holds the passkey ceremony begun through a link, per link
+	// ID (links_passkey.go).
+	linkPasskey map[int64]*linkPasskeyPending
 
 	// bg tracks background applies (see applyAsync).
 	bg sync.WaitGroup
@@ -146,7 +149,7 @@ func (s *Server) Wait() { s.bg.Wait() }
 // New creates the API server.
 func New(d Deps) *Server {
 	s := &Server{Deps: d, mfa: map[string]*mfaPending{}, totpEnrol: map[int64]*totpPending{}, tickets: map[string]*portalTicket{},
-		linkTOTP: map[int64]*totpPending{}}
+		linkTOTP: map[int64]*totpPending{}, linkPasskey: map[int64]*linkPasskeyPending{}}
 	s.routes = s.table()
 	mustValidRoutes(s.routes)
 	return s
@@ -172,9 +175,10 @@ func (s *Server) Handler(listener string) http.Handler {
 			"/page.css":   "portalpage/page.css",
 		}))
 		mux.Handle(caddy.PortalLinkPath+"/", portalPageHandler(caddy.PortalLinkPath, map[string]string{
-			"/":         "portalpage/link.html",
-			"/link.js":  "portalpage/link.js",
-			"/page.css": "portalpage/page.css",
+			"/":            "portalpage/link.html",
+			"/link.js":     "portalpage/link.js",
+			"/webauthn.js": "portalpage/webauthn.js",
+			"/page.css":    "portalpage/page.css",
 		}))
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

@@ -95,6 +95,7 @@ POST   /api/users/{id}/disable                    authed  admin  both
 POST   /api/users/{id}/enable                     authed  admin  both
 POST   /api/users/{id}/reset                      stepup  admin  both
 POST   /marineris-link/api/finish                 ticket  anyone edge
+POST   /marineris-link/api/passkey                ticket  anyone edge
 POST   /marineris-link/api/read                   ticket  anyone edge
 POST   /marineris-link/api/totp                   ticket  anyone edge
 POST   /marineris-passkey/api/begin               ticket  anyone edge

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -88,6 +89,8 @@ func (s *Server) handleLinkRead(w http.ResponseWriter, r *http.Request, rc *reqC
 		// not reachable there, Authelia's logo is.
 		"brand": map[string]string{"name": b.Name, "accent": b.Accent},
 		"sets":  linkSets(l),
+		// The second factor is one of these (links_passkey.go).
+		"second_factors": s.linkSecondFactors(rc.settings),
 	})
 }
 
@@ -137,10 +140,13 @@ func (s *Server) handleLinkTOTP(w http.ResponseWriter, r *http.Request, rc *reqC
 }
 
 // linkFinish is what the link's page sends: the fields of what the link
-// sets.
+// sets. The second factor is an authenticator's code or a passkey (the
+// browser's answer to the creation options, and its name).
 type linkFinish struct {
-	Password string `json:"password"`
-	TOTPCode string `json:"totp_code"`
+	Password    string          `json:"password"`
+	TOTPCode    string          `json:"totp_code"`
+	Passkey     json.RawMessage `json:"passkey"`
+	PasskeyName string          `json:"passkey_name"`
 }
 
 // handleLinkFinish sets what the link sets: an Invite creates its User, a
@@ -163,16 +169,27 @@ func (s *Server) handleLinkFinish(w http.ResponseWriter, r *http.Request, rc *re
 	return errLinkInvalid
 }
 
-// linkSecondFactor is the second factor set up on the link's page.
+// linkSecondFactor is the second factor set up on the link's page: an
+// authenticator, or a passkey (then totpSecret is empty).
 type linkSecondFactor struct {
 	totpSecret string // in clear: sealed with the User's WebAuthn ID
 	totpStep   int64  // the step of the code that confirmed it
+	passkey    *linkNewPasskey
 }
 
 // secondFactor checks the second factor set up on the link's page: the
-// authenticator, confirmed by a valid code. A wrong code counts against the
-// link and is audited as action.
+// authenticator, confirmed by a valid code, or a verified passkey. A wrong
+// code or passkey counts against the link and is audited as action.
 func (s *Server) secondFactor(r *http.Request, rc *reqCtx, l *store.Link, keys []string, req linkFinish, action string) (*linkSecondFactor, error) {
+	withPasskey := len(req.Passkey) > 0 && string(req.Passkey) != "null"
+	switch {
+	case withPasskey && req.TOTPCode != "":
+		return nil, fieldError("second_factor", "an authenticator code or a passkey, not both")
+	case !withPasskey && req.TOTPCode == "":
+		return nil, fieldError("second_factor", "set up an authenticator app or a passkey")
+	case withPasskey:
+		return s.passkeyFactor(r, rc, l, keys, req, action)
+	}
 	s.linkMu.Lock()
 	p := s.linkTOTP[l.ID]
 	s.linkMu.Unlock()
@@ -192,6 +209,7 @@ func (s *Server) secondFactor(r *http.Request, rc *reqCtx, l *store.Link, keys [
 func (s *Server) linkDone(l *store.Link, keys []string) {
 	s.linkMu.Lock()
 	delete(s.linkTOTP, l.ID)
+	delete(s.linkPasskey, l.ID)
 	s.linkMu.Unlock()
 	s.Throttle.Succeed(keys[1:]...)
 }
@@ -215,9 +233,11 @@ func (s *Server) finishInvite(w http.ResponseWriter, r *http.Request, rc *reqCtx
 	if _, err := rand.Read(handle); err != nil {
 		return err
 	}
-	sealed, err := s.Box.Seal([]byte(sf.totpSecret), setup.TOTPContext(handle))
-	if err != nil {
-		return err
+	sealed := ""
+	if sf.totpSecret != "" {
+		if sealed, err = s.Box.Seal([]byte(sf.totpSecret), setup.TOTPContext(handle)); err != nil {
+			return err
+		}
 	}
 	step := sf.totpStep
 	// A former User with the same Username may have left rows in Authelia:
@@ -225,8 +245,18 @@ func (s *Server) finishInvite(w http.ResponseWriter, r *http.Request, rc *reqCtx
 	if err := s.deleteAutheliaUser(ctx, l.Username); err != nil {
 		s.Log.Warn("clearing Authelia's rows before accepting an Invite", "user", l.Username, "err", err)
 	}
+	// A passkey is in Authelia before the User exists.
+	if sf.passkey != nil {
+		if err := s.registerLinkPasskey(r, rc, "invite.accept", l.Username, sf.passkey); err != nil {
+			return err
+		}
+	}
 	u := &store.User{PasswordHash: hash, TOTPSecret: sealed, TOTPLastStep: step, WebAuthnID: handle}
-	switch err := s.Store.AcceptInvite(ctx, l, u); {
+	err = s.Store.AcceptInvite(ctx, l, u)
+	if err != nil && sf.passkey != nil {
+		s.dropLinkPasskey(ctx, l.Username, sf.passkey)
+	}
+	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return errLinkInvalid
 	case errors.Is(err, store.ErrUsernameTaken):
@@ -239,6 +269,7 @@ func (s *Server) finishInvite(w http.ResponseWriter, r *http.Request, rc *reqCtx
 	s.linkDone(l, keys)
 	rc.user = u
 	s.audit(r, rc, "invite.accept", u.Username, true, "")
+	s.auditLinkPasskey(r, rc, sf)
 	s.applyNow(u.Username, "invite accepted by "+u.Username)
 	return ok(w, map[string]string{"redirect_url": s.signInURL(ctx, rc.settings)})
 }
@@ -272,7 +303,9 @@ func (s *Server) finishReset(w http.ResponseWriter, r *http.Request, rc *reqCtx,
 		}
 	}
 	if sf != nil {
-		if change.TOTPSecret, err = s.Box.Seal([]byte(sf.totpSecret), setup.TOTPContext(u.WebAuthnID)); err != nil {
+		if sf.passkey != nil {
+			change.Passkey = true
+		} else if change.TOTPSecret, err = s.Box.Seal([]byte(sf.totpSecret), setup.TOTPContext(u.WebAuthnID)); err != nil {
 			return err
 		}
 		change.TOTPLastStep = sf.totpStep
@@ -284,8 +317,18 @@ func (s *Server) finishReset(w http.ResponseWriter, r *http.Request, rc *reqCtx,
 			return &Error{Status: http.StatusServiceUnavailable, Code: "authelia_unavailable",
 				Message: "your old authenticator and passkeys could not be removed yet; try again in a minute"}
 		}
+		// Then the new passkey; the User stays blocked if this fails.
+		if sf.passkey != nil {
+			if err := s.registerLinkPasskey(r, rc, "reset.use", u.Username, sf.passkey); err != nil {
+				return err
+			}
+		}
 	}
-	switch err := s.Store.UseReset(ctx, l, change); {
+	err = s.Store.UseReset(ctx, l, change)
+	if err != nil && sf != nil && sf.passkey != nil {
+		s.dropLinkPasskey(ctx, u.Username, sf.passkey)
+	}
+	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return errLinkInvalid
 	case err != nil:
@@ -294,6 +337,7 @@ func (s *Server) finishReset(w http.ResponseWriter, r *http.Request, rc *reqCtx,
 	s.linkDone(l, keys)
 	rc.user = u
 	s.audit(r, rc, "reset.use", u.Username, true, l.Resets)
+	s.auditLinkPasskey(r, rc, sf)
 	s.applyNow(u.Username, "reset link used by "+u.Username)
 	return ok(w, map[string]string{"redirect_url": s.signInURL(ctx, rc.settings)})
 }

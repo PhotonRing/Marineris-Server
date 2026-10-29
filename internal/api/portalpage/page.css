@@ -122,6 +122,12 @@ button.primary {
   font: inherit;
 }
 
+.form label.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .form fieldset {
   display: grid;
   gap: 8px;
