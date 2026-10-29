@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -75,6 +76,20 @@ func cleanEmail(v string) (string, error) {
 	}
 	if a, err := mail.ParseAddress(v); err != nil || a.Address != v || len(v) > 254 {
 		return "", errors.New("must be a valid e-mail address")
+	}
+	return v, nil
+}
+
+// usernameRE: what works as a Username in Authelia and in every app.
+var usernameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,31}$`)
+
+// cleanUsername validates a new Username: 2 to 32 lowercase letters,
+// digits, '.', '_' or '-', starting with a letter or digit. Uniqueness
+// (ignoring case) is the store's check.
+func cleanUsername(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if !usernameRE.MatchString(v) {
+		return "", errors.New("2 to 32 lowercase letters, digits, '.', '_' or '-', starting with a letter or digit")
 	}
 	return v, nil
 }

@@ -685,6 +685,34 @@ const routes = [
     return ok({ ok: true });
   })],
 
+  // Invites (pending ones in db.links; nobody can accept them in the demo).
+  ['POST', '/api/invites', (p, b) => {
+    const username = (b.username || '').trim();
+    if (!/^[a-z0-9][a-z0-9._-]{1,31}$/.test(username)) return fail(400, 'invalid', "username: 2 to 32 lowercase letters, digits, '.', '_' or '-', starting with a letter or digit", { field: 'username' });
+    const links = (db.links ||= []);
+    if (db.users.some((u) => u.username.toLowerCase() === username)) return fail(400, 'invalid', 'username: is already taken', { field: 'username' });
+    if (links.some((l) => l.username === username)) return fail(400, 'invalid', 'username: is reserved by a pending Invite', { field: 'username' });
+    const groups = (b.groups || []).map((g) => g.trim().toLowerCase());
+    if (groups.some((g) => BUILTIN_GROUPS.includes(g))) return fail(403, 'builtin_group', 'admins and proxy-admins are managed by the Owner');
+    if (groups.some((g) => !db.groupNames.includes(g))) return fail(400, 'invalid', 'groups: no such Group', { field: 'groups' });
+    const link = {
+      id: (links.reduce((m, l) => Math.max(m, l.id), 0) || 0) + 1, kind: 'invite', username,
+      display_name: (b.display_name || '').trim() || username, email: (b.email || '').trim(), groups: groups.sort(),
+      created_by: 'admin', created_at: iso(), expires_at: new Date(Date.now() + 72 * 3600 * 1000).toISOString(),
+    };
+    links.push(link);
+    audit('invite.create', username, groups.join(','));
+    return ok({ ...link, url: `https://auth.example.com/marineris-link/#demo-${link.id}-not-a-real-link` });
+  }],
+  ['GET', '/api/links', () => ok(db.links || [])],
+  ['DELETE', '/api/links/{id}', (p) => {
+    const l = (db.links || []).find((x) => x.id === +p.id);
+    if (!l) return notFound();
+    db.links = db.links.filter((x) => x !== l);
+    audit(`${l.kind}.revoke`, l.username);
+    return ok({ ok: true });
+  }],
+
   // Groups (custom ones in db.groupNames; memberships live on the users).
   ['GET', '/api/groups', () => ok(groupList())],
   ['POST', '/api/groups', (p, b) => {

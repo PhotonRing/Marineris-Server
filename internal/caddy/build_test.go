@@ -340,3 +340,39 @@ func TestPortalPasskeyPageRoute(t *testing.T) {
 		t.Fatal("passkey page served while Authelia does not protect the UI")
 	}
 }
+
+func TestPortalLinkPageRoute(t *testing.T) {
+	// Invites and Reset links open on the portal hosts whether or not
+	// Authelia protects the UI; identity headers never reach the page.
+	for _, protect := range []bool{true, false} {
+		in := baseInput()
+		in.Settings.UIProtectWithAuthelia = protect
+		m := build(t, in)
+		routes := m["apps"].(map[string]any)["http"].(map[string]any)["servers"].(map[string]any)["edge"].(map[string]any)["routes"].([]any)
+		page, portal := -1, -1
+		for i, r := range routes {
+			b, _ := json.Marshal(r)
+			s := string(b)
+			if strings.Contains(s, `"/marineris-link/*"`) {
+				page = i
+				del := strings.Index(s, `"delete":["Remote-User","Remote-Groups","Remote-Email","Remote-Name"]`)
+				proxy := strings.Index(s, `"dial":"marineris:8080"`)
+				if !strings.Contains(s, `"auth.example.com"`) || del < 0 || proxy < 0 || del > proxy {
+					t.Fatalf("link page route: %s", s)
+				}
+			} else if strings.Contains(s, `"dial":"authelia:9091"`) && strings.Contains(s, `"auth.example.com"`) && !strings.Contains(s, "forward") {
+				portal = i
+			}
+		}
+		if page < 0 || portal < 0 || page > portal {
+			t.Fatalf("protect=%v: link page route %d must come before the portal %d", protect, page, portal)
+		}
+	}
+
+	// Without the UI on a managed domain, there is no page.
+	in := baseInput()
+	in.Settings.UIHost = ""
+	if b, _ := Build(in); strings.Contains(string(b), "/marineris-link") {
+		t.Fatal("link page served without the UI")
+	}
+}

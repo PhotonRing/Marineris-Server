@@ -62,16 +62,13 @@ type portalTicket struct {
 //go:embed portalpage
 var portalPage embed.FS
 
-// portalPageHandler serves the page (edge listener only).
-func portalPageHandler() http.Handler {
-	files := map[string]string{
-		"/":            "portalpage/index.html",
-		"/passkey.js":  "portalpage/passkey.js",
-		"/passkey.css": "portalpage/passkey.css",
-	}
+// portalPageHandler serves a page on the portal's host under prefix (edge
+// listener only): the page adding a passkey, or the Invite and Reset link
+// page (links_page.go).
+func portalPageHandler(prefix string, files map[string]string) http.Handler {
 	types := map[string]string{".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		name, ok := files[strings.TrimPrefix(r.URL.Path, caddy.PortalPasskeyPath)]
+		name, ok := files[strings.TrimPrefix(r.URL.Path, prefix)]
 		if !ok || (r.Method != http.MethodGet && r.Method != http.MethodHead) {
 			http.NotFound(w, r)
 			return

@@ -21,9 +21,10 @@ const (
 	// StepUp routes additionally need a recent password+TOTP or passkey
 	// proof (see StepUpWindow).
 	StepUp
-	// Ticket routes are the page that adds an Authelia passkey, on the
-	// portal's host (edge listener only): no session there, a ticket from
-	// a step-up route instead, and requests from a portal host.
+	// Ticket routes are pages on the portal's host (edge listener only):
+	// no session there, a one-time credential instead (the ticket of the
+	// page adding an Authelia passkey, or an Invite's or Reset link's
+	// token), and requests from a portal host.
 	Ticket
 )
 
@@ -128,6 +129,11 @@ func (s *Server) table() []Route {
 		{P, caddy.PortalPasskeyPath + "/api/begin", Ticket, Anyone, false, s.handlePortalPasskeyBegin},
 		{P, caddy.PortalPasskeyPath + "/api/finish", Ticket, Anyone, false, s.handlePortalPasskeyFinish},
 
+		// The page opening Invites and Reset links, on the portal's host
+		{P, caddy.PortalLinkPath + "/api/read", Ticket, Anyone, false, s.handleLinkRead},
+		{P, caddy.PortalLinkPath + "/api/totp", Ticket, Anyone, false, s.handleLinkTOTP},
+		{P, caddy.PortalLinkPath + "/api/finish", Ticket, Anyone, false, s.handleLinkFinish},
+
 		// Hub (app launcher) and system widgets
 		{G, "/api/hub", Authed, AnyUser, false, s.handleHub},
 		{G, "/api/hub/icons/{id}", Authed, AnyUser, false, s.handleHubIcon},
@@ -152,6 +158,11 @@ func (s *Server) table() []Route {
 		{P, "/api/users/{id}/disable", Authed, Administrator, false, s.handleUserDisable(true)},
 		{P, "/api/users/{id}/enable", Authed, Administrator, false, s.handleUserDisable(false)},
 		{D, "/api/users/{id}", StepUp, Administrator, false, s.handleUserDelete},
+
+		// Invites and Reset links (shown once when created)
+		{P, "/api/invites", StepUp, Administrator, false, s.handleInviteCreate},
+		{G, "/api/links", Authed, Administrator, false, s.handleLinkList},
+		{D, "/api/links/{id}", Authed, Administrator, false, s.handleLinkRevoke},
 
 		// Groups (built-ins are listed but changed only by the Owner)
 		{G, "/api/groups", Authed, Administrator, false, s.handleGroupList},

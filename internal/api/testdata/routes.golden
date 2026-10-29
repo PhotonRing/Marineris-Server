@@ -6,6 +6,7 @@ DELETE /api/dns/profiles/{id}                     stepup  admin  both
 DELETE /api/domains/{id}                          stepup  admin  both
 DELETE /api/groups/{name}                         stepup  admin  both
 DELETE /api/groups/{name}/members/{id}            authed  admin  both
+DELETE /api/links/{id}                            authed  admin  both
 DELETE /api/routes/{id}                           authed  admin  both
 DELETE /api/routes/{id}/icon                      authed  admin  both
 DELETE /api/stacks/{name}                         stepup  admin  both
@@ -32,6 +33,7 @@ GET    /api/groups                                authed  admin  both
 GET    /api/health                                public  anyone both
 GET    /api/hub                                   authed  user   both
 GET    /api/hub/icons/{id}                        authed  user   both
+GET    /api/links                                 authed  admin  both
 GET    /api/meta                                  public  anyone both
 GET    /api/networks                              authed  admin  both
 GET    /api/overview                              authed  admin  both
@@ -69,6 +71,7 @@ POST   /api/dns/profiles                          authed  admin  both
 POST   /api/dns/profiles/{id}/test                authed  admin  both
 POST   /api/domains                               authed  admin  both
 POST   /api/groups                                authed  admin  both
+POST   /api/invites                               stepup  admin  both
 POST   /api/routes                                authed  admin  both
 POST   /api/setup/begin                           setup   anyone local
 POST   /api/setup/finish                          setup   anyone local
@@ -87,6 +90,9 @@ POST   /api/stacks/{name}/services/{service}/update authed  admin  both
 POST   /api/stacks/{name}/start                   authed  admin  both
 POST   /api/users/{id}/disable                    authed  admin  both
 POST   /api/users/{id}/enable                     authed  admin  both
+POST   /marineris-link/api/finish                 ticket  anyone edge
+POST   /marineris-link/api/read                   ticket  anyone edge
+POST   /marineris-link/api/totp                   ticket  anyone edge
 POST   /marineris-passkey/api/begin               ticket  anyone edge
 POST   /marineris-passkey/api/finish              ticket  anyone edge
 PUT    /api/branding                              stepup  admin  both

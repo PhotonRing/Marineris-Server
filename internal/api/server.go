@@ -131,6 +131,10 @@ type Server struct {
 	ticketMu  sync.Mutex
 	// tickets of the page adding Authelia passkeys (portal_passkeys.go).
 	tickets map[string]*portalTicket
+	linkMu  sync.Mutex
+	// linkTOTP holds the authenticator being set up through a link, per
+	// link ID (links_page.go).
+	linkTOTP map[int64]*totpPending
 
 	// bg tracks background applies (see applyAsync).
 	bg sync.WaitGroup
@@ -141,7 +145,8 @@ func (s *Server) Wait() { s.bg.Wait() }
 
 // New creates the API server.
 func New(d Deps) *Server {
-	s := &Server{Deps: d, mfa: map[string]*mfaPending{}, totpEnrol: map[int64]*totpPending{}, tickets: map[string]*portalTicket{}}
+	s := &Server{Deps: d, mfa: map[string]*mfaPending{}, totpEnrol: map[int64]*totpPending{}, tickets: map[string]*portalTicket{},
+		linkTOTP: map[int64]*totpPending{}}
 	s.routes = s.table()
 	mustValidRoutes(s.routes)
 	return s
@@ -161,7 +166,16 @@ func (s *Server) Handler(listener string) http.Handler {
 		mux.Handle(rt.Method+" "+rt.Pattern, s.wrap(listener, rt))
 	}
 	if listener == Edge {
-		mux.Handle(caddy.PortalPasskeyPath+"/", portalPageHandler())
+		mux.Handle(caddy.PortalPasskeyPath+"/", portalPageHandler(caddy.PortalPasskeyPath, map[string]string{
+			"/":           "portalpage/index.html",
+			"/passkey.js": "portalpage/passkey.js",
+			"/page.css":   "portalpage/page.css",
+		}))
+		mux.Handle(caddy.PortalLinkPath+"/", portalPageHandler(caddy.PortalLinkPath, map[string]string{
+			"/":         "portalpage/link.html",
+			"/link.js":  "portalpage/link.js",
+			"/page.css": "portalpage/page.css",
+		}))
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &Error{Status: http.StatusNotFound, Code: "not_found", Message: "no such endpoint"})
