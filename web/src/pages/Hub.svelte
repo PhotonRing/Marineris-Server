@@ -6,6 +6,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { get, describe } from '../lib/api.js';
   import { link } from '../lib/router.js';
+  import { app } from '../lib/state.svelte.js';
 
   let hub = $state(null);
   let stats = $state(null);
@@ -153,7 +154,11 @@
     <input class="hub-search" type="search" placeholder="Search apps…" bind:value={search} aria-label="Search apps" />
 
     {#if !hub.tiles.length}
-      <div class="alert">No apps yet. Publish one on the <a href="/routes" use:link>Routes</a> page: it appears here.</div>
+      {#if app.session?.rights?.administrator}
+        <div class="alert">No apps yet. Publish one on the <a href="/routes" use:link>Routes</a> page: it appears here.</div>
+      {:else}
+        <div class="alert">No apps for you yet. Ask an Administrator of this server.</div>
+      {/if}
     {:else}
       <div class="tiles">
         {#each tiles as t (t.id)}

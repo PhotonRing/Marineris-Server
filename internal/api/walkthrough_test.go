@@ -2,10 +2,7 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -275,17 +272,6 @@ func TestWalkthrough(t *testing.T) {
 	must("POST", "/api/account/totp/finish", map[string]string{"code": code})
 	_ = secret
 	must("POST", "/api/account/sessions/revoke-others", nil)
-
-	// Authelia notification (none yet, then one).
-	if r := must("GET", "/api/authelia/notification", nil); r.Body["present"] != false {
-		t.Fatal("notification")
-	}
-	dir := filepath.Join(e.srv.Config.DataDir, "authelia-notify")
-	_ = os.MkdirAll(dir, 0o700)
-	_ = os.WriteFile(filepath.Join(dir, "notification.txt"), []byte("Your code is 123456"), 0o600)
-	if r := must("GET", "/api/authelia/notification", nil); !strings.Contains(fmt.Sprint(r.Body["content"]), "123456") {
-		t.Fatal("notification content")
-	}
 
 	// Audit trail covers what happened.
 	audit := must("GET", "/api/audit", nil)

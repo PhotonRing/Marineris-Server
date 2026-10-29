@@ -14,7 +14,6 @@ GET    /api/account/authelia-passkeys             authed  user   both
 GET    /api/account/passkeys                      authed  user   both
 GET    /api/audit                                 authed  admin  both
 GET    /api/auth/session                          authed  user   both
-GET    /api/authelia/notification                 authed  admin  both
 GET    /api/branding/{asset}                      public  anyone both
 GET    /api/certificates                          authed  admin  both
 GET    /api/config/components/{component}/current authed  admin  both

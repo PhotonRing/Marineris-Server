@@ -21,6 +21,7 @@
   import Audit from './pages/Audit.svelte';
   import Settings from './pages/Settings.svelte';
   import Account from './pages/Account.svelte';
+  import NotAllowed from './pages/NotAllowed.svelte';
   import House from '@lucide/svelte/icons/house';
   import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
   import Box from '@lucide/svelte/icons/box';
@@ -36,34 +37,43 @@
   import Sun from '@lucide/svelte/icons/sun';
   import Moon from '@lucide/svelte/icons/moon';
 
-  // Icons: Lucide (ISC licence), drawn in the text colour.
+  // Icons: Lucide (ISC licence), drawn in the text colour. Pages marked
+  // admin are for Administrators only (the API refuses everyone else too).
   const pages = [
     { path: '/hub', label: 'Hub', icon: House, component: Hub },
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, component: Dashboard },
-    { section: 'Workloads' },
-    { path: '/containers', label: 'Containers', icon: Box, component: Containers },
-    { path: '/stacks', label: 'Stacks', icon: Layers, component: Stacks },
-    { path: '/storage', label: 'Volumes & networks', icon: HardDrive, component: Storage },
-    { section: 'Edge' },
-    { path: '/routes', label: 'Routes', icon: Route, component: Routes },
-    { path: '/domains', label: 'Domains & certificates', icon: GlobeLock, component: Domains },
-    { path: '/dns', label: 'DNS profiles', icon: Network, component: DNS },
-    { section: 'System' },
-    { path: '/proxy', label: 'Proxy & SSO', icon: FileCog, component: Config },
-    { path: '/audit', label: 'Audit log', icon: ScrollText, component: Audit },
-    { path: '/settings', label: 'Settings', icon: Settings2, component: Settings },
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, component: Dashboard, admin: true },
+    { section: 'Workloads', admin: true },
+    { path: '/containers', label: 'Containers', icon: Box, component: Containers, admin: true },
+    { path: '/stacks', label: 'Stacks', icon: Layers, component: Stacks, admin: true },
+    { path: '/storage', label: 'Volumes & networks', icon: HardDrive, component: Storage, admin: true },
+    { section: 'Edge', admin: true },
+    { path: '/routes', label: 'Routes', icon: Route, component: Routes, admin: true },
+    { path: '/domains', label: 'Domains & certificates', icon: GlobeLock, component: Domains, admin: true },
+    { path: '/dns', label: 'DNS profiles', icon: Network, component: DNS, admin: true },
+    { section: 'System', admin: true },
+    { path: '/proxy', label: 'Proxy & SSO', icon: FileCog, component: Config, admin: true },
+    { path: '/audit', label: 'Audit log', icon: ScrollText, component: Audit, admin: true },
+    { path: '/settings', label: 'Settings', icon: Settings2, component: Settings, admin: true },
     { path: '/account', label: 'Account', icon: CircleUserRound, component: Account },
   ];
 
-  // "/" shows the page chosen in Settings → Home page. /stacks/<name> is the
-  // page of one stack (highlighted as Stacks in the menu).
-  let current = $derived(
-    $path.startsWith('/stacks/')
-      ? { path: $path, nav: '/stacks', label: 'Stacks', component: StackDetail }
-      : pages.find((p) => p.path === ($path === '/' ? (app.home === 'dashboard' ? '/dashboard' : '/hub') : $path)) || pages[0],
-  );
+  let isAdmin = $derived(!!app.session?.rights?.administrator);
+  let navPages = $derived(pages.filter((p) => isAdmin || !p.admin));
+
+  // "/" shows the page chosen in Settings → Home page (always the Hub for
+  // non-Administrators). /stacks/<name> is the page of one stack
+  // (highlighted as Stacks in the menu). An admin page opened by someone
+  // else shows that they may not open it.
+  let current = $derived.by(() => {
+    const page = $path.startsWith('/stacks/')
+      ? { path: $path, nav: '/stacks', label: 'Stacks', component: StackDetail, admin: true }
+      : pages.find((p) => p.path === ($path === '/' ? (isAdmin && app.home === 'dashboard' ? '/dashboard' : '/hub') : $path)) || pages[0];
+    return page.admin && !isAdmin ? { path: page.path, label: 'Not allowed', component: NotAllowed } : page;
+  });
 
   $effect(() => {
+    // Only Administrators may read the settings; everyone else's home is the Hub.
+    if (app.session && !isAdmin) app.home = 'hub';
     if (app.session && !app.home) {
       get('/api/settings')
         .then((s) => (app.home = s.home_page || 'hub'))
@@ -124,7 +134,7 @@
         {#if app.meta.brand?.custom_name}<span class="brand-name">{app.meta.brand.name}</span>{:else}<span class="wordmark" role="img" aria-label="Marineris"></span>{/if}
       </div>
       <nav class="nav">
-        {#each pages as p (p.path || p.section)}
+        {#each navPages as p (p.path || p.section)}
           {#if p.section}
             <div class="section">{p.section}</div>
           {:else}

@@ -143,7 +143,6 @@ func (s *Server) table() []Route {
 		{U, "/api/branding", StepUp, Administrator, false, s.handleBrandingPut},
 		{U, "/api/branding/{asset}", StepUp, Administrator, false, s.handleBrandingAssetPut},
 		{D, "/api/branding/{asset}", StepUp, Administrator, false, s.handleBrandingAssetDelete},
-		{G, "/api/authelia/notification", Authed, Administrator, false, s.handleAutheliaNotification},
 
 		// Users (who may be acted on: mayActOn, people.go)
 		{G, "/api/users", Authed, Administrator, false, s.handleUserList},

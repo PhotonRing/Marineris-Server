@@ -117,11 +117,14 @@ function routeIcon(r) {
   return db.serviceIcons.get(link) || '';
 }
 
+// Like internal/api/hub.go: admins-only tiles and the widgets only for
+// Administrators.
 function hub() {
+  const admin = !!db.session?.rights?.administrator;
   return {
-    title: db.settings.hub_title, widgets: db.settings.hub_widgets, background: db.settings.hub_background,
+    title: db.settings.hub_title, widgets: admin ? db.settings.hub_widgets : [], background: db.settings.hub_background,
     tiles: db.routes
-      .filter((r) => r.enabled && r.hub.visible)
+      .filter((r) => r.enabled && r.hub.visible && (admin || r.auth !== 'admins'))
       .map((r) => ({ id: r.id, title: r.hub.title || r.name, subtitle: r.hub.subtitle, url: `https://${r.host}${r.path_prefix || ''}/`, auth: r.auth, ...(routeIcon(r) ? { icon: routeIcon(r) } : {}) }))
       .sort((a, b) => a.title.localeCompare(b.title)),
   };
@@ -378,7 +381,6 @@ const routes = [
     return ok(db.settings);
   }],
   ['GET', '/api/audit', () => ok(db.audit.slice(0, 200))],
-  ['GET', '/api/authelia/notification', () => ok({ present: false })],
 
   ['GET', '/api/dns/providers', () => ok(db.providers)],
   ['GET', '/api/dns/profiles', () => ok(db.profiles)],

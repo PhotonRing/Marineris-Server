@@ -90,9 +90,9 @@ func prepare(cfg *config.Config) error {
 	if err := os.Chmod(cfg.SecretsDir(), 0o700); err != nil { //nolint:gosec // directory: needs the x bit
 		return err
 	}
-	// Authelia (same UID) writes its notifications and database here;
-	// Marineris reads the notifications. Valkey (same UID) keeps Authelia's
-	// sessions in authelia-sessions.
+	// Authelia (same UID) writes its notifications (its notifier is
+	// mandatory; nobody reads them) and database here. Valkey (same UID)
+	// keeps Authelia's sessions in authelia-sessions.
 	for _, d := range []string{"authelia-notify", "authelia-data", "authelia-sessions"} {
 		if err := os.MkdirAll(filepath.Join(cfg.DataDir, d), 0o700); err != nil {
 			return err
