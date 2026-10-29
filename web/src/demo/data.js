@@ -4,6 +4,9 @@
 import providers from './providers.json';
 import configs from './configs.json';
 
+// The newest released version (CHANGELOG.md), set by vite.config.js.
+const VERSION = __MARINERIS_DEMO_VERSION__;
+
 const now = Date.now();
 const ago = (minutes) => new Date(now - minutes * 60000).toISOString();
 const unix = (minutes) => Math.floor((now - minutes * 60000) / 1000);
@@ -35,8 +38,8 @@ function container(n, name, image, extra = {}) {
 export function seed() {
   const admin = { id: 1, username: 'admin', display_name: 'admin', email: '', disabled: false, groups: ['admins'], created_at: ago(43200), updated_at: ago(43200) };
   const containers = [
-    container(1, 'marineris', 'ghcr.io/photonring/marineris:0.1.0', { health: 'healthy', status: 'Up 3 days (healthy)', ports: [8080, 8081], stack: 'marineris', service: 'marineris', networks: ['marineris_auth', 'marineris_docker-api', 'marineris_outbound', 'marineris_ui'], system: true }),
-    container(2, 'marineris-caddy', 'ghcr.io/photonring/marineris-caddy:0.1.0', { ports: [80, 443, 2019], stack: 'marineris', service: 'caddy', networks: ['marineris-apps', 'marineris_auth', 'marineris_crowdsec', 'marineris_edge', 'marineris_ui'], system: true }),
+    container(1, 'marineris', `ghcr.io/photonring/marineris:${VERSION}`, { health: 'healthy', status: 'Up 3 days (healthy)', ports: [8080, 8081], stack: 'marineris', service: 'marineris', networks: ['marineris_auth', 'marineris_docker-api', 'marineris_outbound', 'marineris_ui'], system: true }),
+    container(2, 'marineris-caddy', `ghcr.io/photonring/marineris-caddy:${VERSION}`, { ports: [80, 443, 2019], stack: 'marineris', service: 'caddy', networks: ['marineris-apps', 'marineris_auth', 'marineris_crowdsec', 'marineris_edge', 'marineris_ui'], system: true }),
     container(3, 'marineris-authelia', 'authelia/authelia:4.39.28', { health: 'healthy', status: 'Up 3 days (healthy)', ports: [9091], stack: 'marineris', service: 'authelia', networks: ['marineris_auth'], system: true }),
     container(4, 'marineris-crowdsec', 'crowdsecurity/crowdsec:v1.8.1', { ports: [6060, 8080], stack: 'marineris', service: 'crowdsec', networks: ['marineris_crowdsec'], system: true }),
     container(5, 'marineris-socket-proxy', 'wollomatic/socket-proxy:1', { ports: [2375], stack: 'marineris', service: 'socket-proxy', networks: ['marineris_docker-api'], system: true }),
@@ -56,7 +59,7 @@ export function seed() {
     route(4, 'docs', 'docs.valles.example', 'static', { folder: 'docs' }, 'none', { visible: true, title: 'Documentation', subtitle: 'Static site' }, 1500),
   ];
   return {
-    meta: { listener: 'edge', name: 'Marineris', setup_complete: true, ui_host: 'mars.example', version: '0.1.0 (demo)' },
+    meta: { listener: 'edge', name: 'Marineris', setup_complete: true, ui_host: 'mars.example', version: `${VERSION} (demo)` },
     user: admin,
     // The Users page (admin is the Owner).
     users: [

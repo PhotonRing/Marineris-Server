@@ -1,4 +1,6 @@
+import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
+import { newestVersion } from '../../../web/scripts/changelog-version.js';
 
 // Fails on any page error, failed request to the site itself, or CSP report.
 function watch(page) {
@@ -26,6 +28,14 @@ test('every page of the demo renders, signed in, with sample data', async ({ pag
   await page.reload();
   await expect(page.getByRole('heading', { level: 1, name: 'Account' })).toBeVisible();
   expect(problems).toEqual([]);
+});
+
+test('the dashboard shows the newest released version', async ({ page }) => {
+  const version = newestVersion(fs.readFileSync(new URL('../../../CHANGELOG.md', import.meta.url), 'utf8'));
+  await page.goto('./#/dashboard');
+  await expect(page.getByText(`Marineris ${version} (demo)`)).toBeVisible();
+  await page.goto('./#/containers');
+  await expect(page.getByText(`ghcr.io/photonring/marineris:${version}`, { exact: true })).toBeVisible();
 });
 
 test('a route can be published and shows on the hub', async ({ page }) => {
@@ -230,11 +240,15 @@ test('route icons follow their service; a route icon of its own can be undone', 
   // Give it an icon of its own, then go back: the service's icon is intact.
   await page.getByLabel('Icon', { exact: true }).selectOption('url');
   await page.getByPlaceholder('https://example.com/icon.png').fill('https://example.com/films.png');
+  // Each save finishes (the dialog closes) before the route is opened again.
+  const routeDialog = page.locator('dialog[open]');
   await page.getByRole('button', { name: 'Save & apply' }).click();
+  await expect(routeDialog).toHaveCount(0);
   await page.getByRole('row', { name: /media\.mars\.example/ }).getByRole('button', { name: 'Edit' }).click();
   await expect(page.getByLabel('Icon', { exact: true }).locator('option:checked')).toHaveText('Keep: its own icon');
   await page.getByLabel('Icon', { exact: true }).selectOption('auto');
   await page.getByRole('button', { name: 'Save & apply' }).click();
+  await expect(routeDialog).toHaveCount(0);
   await page.getByRole('link', { name: 'Hub', exact: true }).click();
   await expect(page.getByRole('link', { name: /^Jellyfin/ }).locator('img')).toHaveAttribute('src', /^data:image\/svg/);
   await expect(page.getByRole('link', { name: /^jellyseerr/ }).locator('img')).toHaveAttribute('src', /^data:image\/svg/);
