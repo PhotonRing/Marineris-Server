@@ -143,7 +143,6 @@ func (s *Server) table() []Route {
 		{U, "/api/branding", StepUp, Administrator, false, s.handleBrandingPut},
 		{U, "/api/branding/{asset}", StepUp, Administrator, false, s.handleBrandingAssetPut},
 		{D, "/api/branding/{asset}", StepUp, Administrator, false, s.handleBrandingAssetDelete},
-		{G, "/api/authelia/notification", Authed, Administrator, false, s.handleAutheliaNotification},
 
 		// DNS profiles
 		{G, "/api/dns/providers", Authed, Administrator, false, s.handleDNSProviders},
