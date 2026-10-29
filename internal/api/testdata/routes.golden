@@ -4,6 +4,8 @@ DELETE /api/branding/{asset}                      stepup  admin  both
 DELETE /api/containers/{id}                       stepup  admin  both
 DELETE /api/dns/profiles/{id}                     stepup  admin  both
 DELETE /api/domains/{id}                          stepup  admin  both
+DELETE /api/groups/{name}                         stepup  admin  both
+DELETE /api/groups/{name}/members/{id}            authed  admin  both
 DELETE /api/routes/{id}                           authed  admin  both
 DELETE /api/routes/{id}/icon                      authed  admin  both
 DELETE /api/stacks/{name}                         stepup  admin  both
@@ -26,6 +28,7 @@ GET    /api/containers/{id}/logs                  authed  admin  both
 GET    /api/dns/profiles                          authed  admin  both
 GET    /api/dns/providers                         authed  admin  both
 GET    /api/domains                               authed  admin  both
+GET    /api/groups                                authed  admin  both
 GET    /api/health                                public  anyone both
 GET    /api/hub                                   authed  user   both
 GET    /api/hub/icons/{id}                        authed  user   both
@@ -65,6 +68,7 @@ POST   /api/containers/{id}/stop                  authed  admin  both
 POST   /api/dns/profiles                          authed  admin  both
 POST   /api/dns/profiles/{id}/test                authed  admin  both
 POST   /api/domains                               authed  admin  both
+POST   /api/groups                                authed  admin  both
 POST   /api/routes                                authed  admin  both
 POST   /api/setup/begin                           setup   anyone local
 POST   /api/setup/finish                          setup   anyone local
@@ -89,6 +93,8 @@ PUT    /api/branding                              stepup  admin  both
 PUT    /api/branding/{asset}                      stepup  admin  both
 PUT    /api/dns/profiles/{id}                     stepup  admin  both
 PUT    /api/domains/{id}                          authed  admin  both
+PUT    /api/groups/{name}                         authed  admin  both
+PUT    /api/groups/{name}/members/{id}            authed  admin  both
 PUT    /api/routes/{id}                           authed  admin  both
 PUT    /api/routes/{id}/icon                      authed  admin  both
 PUT    /api/settings                              stepup  admin  both

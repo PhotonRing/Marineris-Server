@@ -19,6 +19,7 @@ var (
 	labelRE     = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	containerRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
 	stackRE     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
+	groupRE     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,31}$`)
 	folderRE    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 	pathRE      = regexp.MustCompile(`^(/[A-Za-z0-9._~-]+)+$`)
 	nameRE      = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N} ._()-]{0,63}$`)
@@ -113,6 +114,19 @@ func StackName(n string) error {
 func FolderName(n string) error {
 	if !folderRE.MatchString(n) || strings.Contains(n, "..") {
 		return errors.New("must be 1-64 characters: lowercase letters, digits, '.', '_' or '-'")
+	}
+	return nil
+}
+
+// GroupName validates the name of a custom Group: it lands in Authelia's
+// users file and, later, in OIDC groups claims. The built-in names are
+// reserved.
+func GroupName(n string) error {
+	if !groupRE.MatchString(n) {
+		return errors.New("must be 2-32 characters: lowercase letters, digits, '_' or '-', starting with a letter or digit")
+	}
+	if n == "admins" || n == "proxy-admins" {
+		return errors.New("is reserved for a built-in Group")
 	}
 	return nil
 }

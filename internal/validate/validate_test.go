@@ -79,6 +79,16 @@ func TestNames(t *testing.T) {
 			t.Errorf("display name %q accepted", n)
 		}
 	}
+	for _, g := range []string{"family", "f2", "team_a-b", "1st", strings.Repeat("a", 32)} {
+		if err := GroupName(g); err != nil {
+			t.Errorf("group %q rejected: %v", g, err)
+		}
+	}
+	for _, g := range []string{"", "a", "Family", "a b", "a.b", "-x", "_x", "été", "a\n", strings.Repeat("a", 33), "admins", "proxy-admins"} {
+		if GroupName(g) == nil {
+			t.Errorf("group %q accepted", g)
+		}
+	}
 }
 
 func TestUpstreamURL(t *testing.T) {

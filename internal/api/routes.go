@@ -153,6 +153,14 @@ func (s *Server) table() []Route {
 		{P, "/api/users/{id}/enable", Authed, Administrator, false, s.handleUserDisable(false)},
 		{D, "/api/users/{id}", StepUp, Administrator, false, s.handleUserDelete},
 
+		// Groups (built-ins are listed but changed only by the Owner)
+		{G, "/api/groups", Authed, Administrator, false, s.handleGroupList},
+		{P, "/api/groups", Authed, Administrator, false, s.handleGroupCreate},
+		{U, "/api/groups/{name}", Authed, Administrator, false, s.handleGroupRename},
+		{D, "/api/groups/{name}", StepUp, Administrator, false, s.handleGroupDelete},
+		{U, "/api/groups/{name}/members/{id}", Authed, Administrator, false, s.handleGroupMember(true)},
+		{D, "/api/groups/{name}/members/{id}", Authed, Administrator, false, s.handleGroupMember(false)},
+
 		// DNS profiles
 		{G, "/api/dns/providers", Authed, Administrator, false, s.handleDNSProviders},
 		{G, "/api/dns/profiles", Authed, Administrator, false, s.handleDNSList},

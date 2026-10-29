@@ -44,14 +44,10 @@
       error = describe(err);
       return;
     }
-    // The Groups page's list when there is one; otherwise every custom Group
-    // a User is in.
     try {
-      const gs = await get('/api/groups');
-      groupNames = gs.map((g) => (typeof g === 'string' ? g : g.name)).filter((g) => !BUILTIN.includes(g));
-    } catch {
-      const users = await get('/api/users').catch(() => []);
-      groupNames = [...new Set(users.flatMap((u) => u.groups))].filter((g) => !BUILTIN.includes(g)).sort();
+      groupNames = (await get('/api/groups')).filter((g) => !g.builtin).map((g) => g.name);
+    } catch (err) {
+      groupError = describe(err);
     }
   });
 

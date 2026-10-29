@@ -24,7 +24,9 @@
   import NotAllowed from './pages/NotAllowed.svelte';
   import Users from './pages/Users.svelte';
   import UserDetail from './pages/UserDetail.svelte';
+  import Groups from './pages/Groups.svelte';
   import UsersIcon from '@lucide/svelte/icons/users';
+  import UsersRound from '@lucide/svelte/icons/users-round';
   import House from '@lucide/svelte/icons/house';
   import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
   import Box from '@lucide/svelte/icons/box';
@@ -55,6 +57,7 @@
     { path: '/dns', label: 'DNS profiles', icon: Network, component: DNS, admin: true },
     { section: 'System', admin: true },
     { path: '/users', label: 'Users', icon: UsersIcon, component: Users, admin: true },
+    { path: '/groups', label: 'Groups', icon: UsersRound, component: Groups, admin: true },
     { path: '/proxy', label: 'Proxy & SSO', icon: FileCog, component: Config, admin: true },
     { path: '/audit', label: 'Audit log', icon: ScrollText, component: Audit, admin: true },
     { path: '/settings', label: 'Settings', icon: Settings2, component: Settings, admin: true },

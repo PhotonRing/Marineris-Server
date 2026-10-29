@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 )
 
 // CreateGroup creates a custom group. Names are unique ignoring case;
@@ -16,10 +17,78 @@ func (s *Store) CreateGroup(ctx context.Context, name string) error {
 	return err
 }
 
-// DeleteGroup deletes a group and its memberships. It does not protect the
-// built-in groups: callers refuse that.
+// DeleteGroup deletes a custom group and its memberships; its users stay. A
+// built-in group is never deleted (ErrNotFound): callers refuse it first.
 func (s *Store) DeleteGroup(ctx context.Context, name string) error {
-	return s.execOne(ctx, `DELETE FROM groups WHERE name = ?`, name)
+	return s.execOne(ctx, `DELETE FROM groups WHERE name = ? AND builtin = 0`, name)
+}
+
+// RenameGroup renames a custom group: ErrNotFound when there is no such
+// custom group (built-ins are never renamed), ErrConflict when the new name
+// is taken, ignoring case.
+func (s *Store) RenameGroup(ctx context.Context, name, newName string) error {
+	return s.execOne(ctx, `UPDATE groups SET name = ? WHERE name = ? AND builtin = 0`, newName, name)
+}
+
+// Group is a group with its members.
+type Group struct {
+	Name      string        `json:"name"`
+	Builtin   bool          `json:"builtin"`
+	CreatedAt time.Time     `json:"created_at"`
+	Members   []GroupMember `json:"members"`
+}
+
+// GroupMember is a user as a group lists them.
+type GroupMember struct {
+	ID          int64  `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+}
+
+// ListGroups returns every group, built-ins first then by name, each with
+// its members sorted by username.
+func (s *Store) ListGroups(ctx context.Context) ([]*Group, error) {
+	return s.groups(ctx, ``)
+}
+
+// GetGroup returns one group with its members (ErrNotFound).
+func (s *Store) GetGroup(ctx context.Context, name string) (*Group, error) {
+	gs, err := s.groups(ctx, `WHERE g.name = ?`, name)
+	if err != nil {
+		return nil, err
+	}
+	if len(gs) == 0 {
+		return nil, ErrNotFound
+	}
+	return gs[0], nil
+}
+
+func (s *Store) groups(ctx context.Context, where string, args ...any) ([]*Group, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT g.name, g.builtin, g.created_at, u.id, u.username, u.display_name
+		FROM groups g LEFT JOIN group_members m ON m.group_id = g.id LEFT JOIN users u ON u.id = m.user_id
+		`+where+` ORDER BY g.builtin DESC, g.name, u.username`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Group
+	for rows.Next() {
+		var g Group
+		var id sql.NullInt64
+		var username, display sql.NullString
+		if err := rows.Scan(&g.Name, &g.Builtin, &g.CreatedAt, &id, &username, &display); err != nil {
+			return nil, err
+		}
+		if len(out) == 0 || out[len(out)-1].Name != g.Name {
+			g.Members = []GroupMember{}
+			out = append(out, &g)
+		}
+		if id.Valid {
+			last := out[len(out)-1]
+			last.Members = append(last.Members, GroupMember{ID: id.Int64, Username: username.String, DisplayName: display.String})
+		}
+	}
+	return out, rows.Err()
 }
 
 // AddGroupMember puts a user in a group (no-op when already a member). It

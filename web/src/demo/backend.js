@@ -684,7 +684,70 @@ const routes = [
     applied(`user ${u.username} deleted`, ['authelia']);
     return ok({ ok: true });
   })],
+
+  // Groups (custom ones in db.groupNames; memberships live on the users).
+  ['GET', '/api/groups', () => ok(groupList())],
+  ['POST', '/api/groups', (p, b) => {
+    const bad = groupNameError(b.name);
+    if (bad) return bad;
+    db.groupNames = [...db.groupNames, b.name].sort();
+    audit('group.create', b.name);
+    return { ...ok(groupList().find((g) => g.name === b.name)), status: 201 };
+  }],
+  ['PUT', '/api/groups/{name}', (p, b) => withGroup(p, () => {
+    const bad = groupNameError(b.name);
+    if (bad) return bad;
+    db.groupNames = db.groupNames.map((g) => (g === p.name ? b.name : g)).sort();
+    for (const u of db.users) u.groups = u.groups.map((g) => (g === p.name ? b.name : g)).sort();
+    audit('group.rename', b.name, `from ${p.name}`);
+    applied(`group ${p.name} renamed to ${b.name}`, ['authelia']);
+    return ok(groupList().find((g) => g.name === b.name));
+  })],
+  ['DELETE', '/api/groups/{name}', (p) => withGroup(p, () => {
+    db.groupNames = db.groupNames.filter((g) => g !== p.name);
+    for (const u of db.users) u.groups = u.groups.filter((g) => g !== p.name);
+    audit('group.delete', p.name);
+    applied(`group ${p.name} deleted`, ['authelia']);
+    return ok({ ok: true });
+  })],
+  ['PUT', '/api/groups/{name}/members/{id}', (p) => groupMember(p, true)],
+  ['DELETE', '/api/groups/{name}/members/{id}', (p) => groupMember(p, false)],
 ];
+
+const BUILTIN_GROUPS = ['admins', 'proxy-admins'];
+
+function groupList() {
+  const member = (name) => db.users
+    .filter((u) => u.groups.includes(name))
+    .map((u) => ({ id: u.id, username: u.username, display_name: u.display_name }))
+    .sort((a, b) => a.username.localeCompare(b.username));
+  return [
+    ...BUILTIN_GROUPS.map((name) => ({ name, builtin: true, members: member(name) })),
+    ...db.groupNames.map((name) => ({ name, builtin: false, members: member(name) })),
+  ];
+}
+
+function groupNameError(name) {
+  if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(name || '')) return fail(400, 'invalid', "name: must be 2-32 characters: lowercase letters, digits, '_' or '-', starting with a letter or digit", { field: 'name' });
+  if (BUILTIN_GROUPS.includes(name)) return fail(400, 'invalid', 'name: is reserved for a built-in Group', { field: 'name' });
+  if (db.groupNames.includes(name)) return fail(409, 'conflict', 'an item with the same name already exists');
+  return null;
+}
+
+function withGroup(p, fn) {
+  if (BUILTIN_GROUPS.includes(p.name)) return fail(403, 'builtin_group', 'admins and proxy-admins are managed by the Owner');
+  return db.groupNames.includes(p.name) ? fn() : notFound();
+}
+
+function groupMember(p, add) {
+  const action = add ? 'group.member_add' : 'group.member_remove';
+  return withGroup(p, () => withUser(p, (u) => {
+    u.groups = add ? [...new Set([...u.groups, p.name])].sort() : u.groups.filter((g) => g !== p.name);
+    audit(action, p.name, u.username);
+    applied(`${action} ${p.name} ${u.username}`, ['authelia']);
+    return ok(groupList().find((g) => g.name === p.name));
+  }));
+}
 
 function userView(u) {
   return { ...u, state: u.disabled ? 'disabled' : 'active', owner: u.id === 1 };
