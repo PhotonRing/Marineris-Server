@@ -24,8 +24,8 @@ type User struct {
 	// through AddGroupMember.
 	Groups       []string `json:"groups"`
 	PasswordHash string   `json:"-"`
-	TOTPSecret   string `json:"-"` // sealed
-	TOTPLastStep int64  `json:"-"`
+	TOTPSecret   string   `json:"-"` // sealed
+	TOTPLastStep int64    `json:"-"`
 	// AutheliaTOTP is the fingerprint of the TOTP secret last registered in
 	// Authelia (empty: none yet).
 	AutheliaTOTP  string    `json:"-"`

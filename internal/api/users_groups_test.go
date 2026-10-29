@@ -55,9 +55,9 @@ func TestSessionReportsRightsFromGroups(t *testing.T) {
 	add("dave", "Dave", store.GroupProxyAdmins) // not an Administrator: not a Proxy & SSO one either
 
 	for user, want := range map[string]string{
-		"bob":   "bob Bob groups=[admins proxy-admins] admin=true proxy=true owner=false",
-		"carol": "carol carol groups=[family] admin=false proxy=false owner=false",
-		"dave":  "dave Dave groups=[proxy-admins] admin=false proxy=false owner=false",
+		"bob":    "bob Bob groups=[admins proxy-admins] admin=true proxy=true owner=false",
+		"carol":  "carol carol groups=[family] admin=false proxy=false owner=false",
+		"dave":   "dave Dave groups=[proxy-admins] admin=false proxy=false owner=false",
 		testUser: "admin admin groups=[admins] admin=true proxy=false owner=true",
 	} {
 		if got := rightsOf(t, e.autheliaClient(user).do("GET", "/api/auth/session", nil)); got != want {
