@@ -241,6 +241,17 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request, rc *r
 		next.HubBackground = req.HubBackground
 	}
 	ctx := r.Context()
+	if next.UIProtectWithAuthelia != rc.settings.UIProtectWithAuthelia || next.AuthSubdomain != rc.settings.AuthSubdomain {
+		// How Authelia protects the UI is the Owner's or a Proxy & SSO
+		// Administrator's to change.
+		allowed, err := s.allowed(ctx, rc.user, ProxyAdmin)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return errNotAllowed
+		}
+	}
 	if next.UIHost != "" {
 		if err := validate.Hostname(next.UIHost); err != nil {
 			return fieldError("ui_host", err.Error())

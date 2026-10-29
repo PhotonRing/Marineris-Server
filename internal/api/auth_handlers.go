@@ -297,6 +297,13 @@ func (s *Server) verifyUserTOTP(ctx context.Context, u *store.User, code string)
 }
 
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, rc *reqCtx, u *store.User, method string) error {
+	if rc.listener == Local && !u.IsAdministrator() {
+		// The break-glass listener is for Administrators only. Refused
+		// after both factors, so this tells nothing to someone without
+		// the User's credentials.
+		s.audit(r, rc, "login", u.Username, false, "not an Administrator (local listener)")
+		return errNotAllowed
+	}
 	// Drop any session the browser already had (prevents fixation).
 	_ = s.Sessions.Destroy(r.Context(), w, r)
 	se, err := s.Sessions.Create(r.Context(), w, r, u.ID, method)

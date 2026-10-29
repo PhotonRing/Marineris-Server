@@ -143,6 +143,7 @@ func (s *Server) Wait() { s.bg.Wait() }
 func New(d Deps) *Server {
 	s := &Server{Deps: d, mfa: map[string]*mfaPending{}, totpEnrol: map[int64]*totpPending{}, tickets: map[string]*portalTicket{}}
 	s.routes = s.table()
+	mustValidRoutes(s.routes)
 	return s
 }
 
@@ -290,6 +291,20 @@ func (s *Server) wrap(listener string, rt Route) http.Handler {
 				writeError(w, &Error{Status: http.StatusForbidden, Code: "csrf", Message: "missing or invalid CSRF token"})
 				return
 			}
+			// Checked before step-up: nobody is asked to confirm their
+			// identity for something they may not do anyway.
+			who := rt.Who
+			if listener == Local && who < Administrator {
+				// The break-glass listener is for Administrators only.
+				who = Administrator
+			}
+			if allowed, err := s.allowed(ctx, u, who); err != nil {
+				s.fail(w, r, err)
+				return
+			} else if !allowed {
+				writeError(w, errNotAllowed)
+				return
+			}
 			if rt.Access == StepUp && !s.Sessions.RecentlyAuthenticated(se, StepUpWindow) {
 				writeError(w, &Error{Status: http.StatusForbidden, Code: "reauth_required", Message: "confirm your identity to continue"})
 				return
@@ -303,6 +318,27 @@ func (s *Server) wrap(listener string, rt Route) http.Handler {
 			s.fail(w, r, err)
 		}
 	})
+}
+
+// errNotAllowed is the answer to a signed-in User lacking the rights a route
+// or a setting needs; the UI recognises it by its code.
+var errNotAllowed = &Error{Status: http.StatusForbidden, Code: "not_allowed", Message: "you are not allowed to do this"}
+
+// allowed reports whether the User may call a route needing who.
+func (s *Server) allowed(ctx context.Context, u *store.User, who Who) (bool, error) {
+	switch who {
+	case Anyone, AnyUser:
+		return true, nil
+	case Administrator:
+		return u.IsAdministrator(), nil
+	case ProxyAdmin, Owner:
+		if who == ProxyAdmin && u.IsProxyAdmin() {
+			return true, nil
+		}
+		owner, err := s.Store.OwnerID(ctx)
+		return err == nil && owner == u.ID, err
+	}
+	return false, nil
 }
 
 // checkOrigin requires unsafe requests to come from the UI's own origin.
