@@ -18,6 +18,69 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29
+
+Users and Groups: the first Phase 2 version. Invite the people you share the
+server with; each of them signs in once and sees only their own apps.
+
+**Upgrading from 0.1.10:** in `.env`, set `MARINERIS_IMAGE` and
+`MARINERIS_CADDY_IMAGE` to the `0.2.0` tags, then
+`docker compose pull && docker compose up -d` (see the
+[upgrade runbook](https://github.com/PhotonRing/Marineris-Server/blob/main/docs/runbooks/upgrade.md)).
+`compose.yml` is unchanged. On start:
+
+- The database moves to schema version 6 by itself: every existing user
+  joins the **admins** Group, and the oldest one becomes the **Owner**
+  (hand ownership over later from **Users** → the person → **Make Owner**).
+- Authelia restarts once to apply its new setting `refresh_interval: always`
+  (it re-reads the Users on every request, so a disabled User is out at
+  once). Sign-ins are kept in Valkey: nobody is signed out.
+- The **Account** card showing Authelia's messages, and the endpoint behind
+  it (`GET /api/authelia/notification`), are gone: one-time codes now come
+  from Invites and Reset links, without e-mail.
+
+### Added
+
+- **Users and Groups.** One **Owner**, **Administrators** (the built-in
+  `admins` Group), **Proxy & SSO Administrators** (`proxy-admins`) and
+  Groups of your own, managed from the new **Users** and **Groups** pages.
+  Only the Owner manages Administrators and hands ownership over;
+  Administrators manage everyone else. A User can be disabled (signed out
+  everywhere at once, everything kept), enabled again or deleted.
+- **Invites without e-mail.** An Administrator invites someone by Username
+  and gets a link (with its QR code) to pass on. The person opens it on the
+  sign-in portal's address, chooses a password and sets up an authenticator
+  app or a **passkey**; only then does the User exist. Links work once and
+  expire; pending Invites are listed and can be revoked.
+- **Reset links.** For someone who lost their password or phone: a link
+  that resets the password, the second factor or both. The User is signed
+  out and blocked until the link is used or revoked.
+- **Everyone sees only their apps.** The Hub lists only the routes each
+  User may open; people who are not Administrators see the Hub and their
+  Account, nothing else, and every Administrator endpoint answers them 403.
+  Every endpoint now states who may call it, checked at start-up.
+
+### Changed
+
+- The Marineris UI behind Authelia opens for every signed-in User (it was
+  Administrators-only in Authelia); the API decides what each may do there.
+  Administrators-only routes stay closed to everyone else.
+- New web UI dependency: [uqr](https://github.com/unjs/uqr) 0.1.2 draws the
+  QR codes of links in the browser, without any external service.
+- The online demo shows the version of its release (it showed 0.1.0).
+
+### Fixed
+
+- A demo browser test opened a route again before its save had finished,
+  and failed now and then.
+
+### Tests
+
+- A browser suite on the whole stack (`deploy/demo/demo.sh up`): an Invite
+  accepted with an authenticator or a passkey, sign-in through Authelia, a
+  non-Administrator's view, a disabled User's open session refused, a Reset
+  link. It runs in the CI on every change to the code or the images.
+
 ## [0.1.10] - 2026-10-29
 
 Signing in survives configuration changes and restarts.

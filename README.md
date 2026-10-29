@@ -10,18 +10,26 @@
   with 2FA and passkeys, and a shield — all managed from one UI, secure by default.
 </p>
 
-> **Status: Phase 1 (pre-release).** Containers, stacks, routes, multi-domain
-> certificates with DNS profiles, first-run setup and admin authentication are
-> implemented. Users/OIDC UI, CrowdSec UI, dashboard metrics, backups, web
-> terminal, marketplace and disk manager come in later phases (see
-> [Roadmap](#roadmap)).
+> **Status: Phase 2 (pre-release).** Containers, stacks, routes, multi-domain
+> certificates with DNS profiles, first-run setup, authentication and, since
+> 0.2.0, **users and groups** (invites and reset links without e-mail) are
+> implemented. Per-route access by user and group, Proxy & SSO editing, OIDC
+> clients, CrowdSec UI, dashboard metrics, backups, web terminal, marketplace
+> and disk manager come next (see [Roadmap](#roadmap)).
 
 <p align="center">
   <img src="docs/images/hub.webp" alt="The Marineris hub: server widgets and app tiles over the Mars background" width="900">
 </p>
 
-## Features (Phase 1)
+## Features
 
+- **Users and Groups.** Share the server: one **Owner**, **Administrators**,
+  and Groups of your own. Invite someone with a link (and its QR code) that
+  works without an e-mail server: they choose a password and set up an
+  authenticator app or a passkey on the sign-in page. **Reset links** for a
+  lost password or phone; disable a User and they are signed out everywhere
+  at once. People who are not Administrators see only the apps they may open
+  and their Account.
 - **Hub.** A home page listing your apps as tiles (icon, name, subtitle — all
   customisable) with live widgets: server time, CPU, memory, disk, network and
   uptime. The status dashboard can be the home page instead.
@@ -151,7 +159,7 @@ Full guide: [docs/install.md](docs/install.md).
 | Phase | Scope |
 |---|---|
 | 1 ✅ | Repository, CI, compose stack, first-run setup, containers/stacks (stack page with per-service status, actions, editing of mounts, labels and more, icons), routes (public, 2FA or admins only), multi-domain certificates with DNS profiles, passkeys, branding from the UI, Proxy & SSO overview |
-| 2 | In this order: **users and groups** (an Owner, administrators, invites and reset links that work without e-mail, users who only see the hub and their account); **per-route access** by user and group (beyond "administrators only"); **Proxy & SSO editing** for the Owner and the administrators they delegate it to: Authelia settings from the UI (session lifetimes, login ban, password policy, optional e-mail notifier) and raw Caddy/Authelia edits kept across regenerations (validated overrides); **OIDC clients**; **CrowdSec UI** (decisions, manual bans, alerts, allow-lists); **status dashboard and alerts**, with per-service CPU, memory and network graphs on the stack page, collected by Marineris itself, and alerts in the UI, by e-mail or by webhook (ntfy, Gotify, Discord); **live log streaming**; mount options beyond read-only (tmpfs, bind propagation, volume sub-paths, NFS/CIFS volumes) |
+| 2 | In this order: **users and groups** ✅ 0.2.0 (an Owner, administrators, invites and reset links that work without e-mail, users who only see the hub and their account); **per-route access** by user and group (beyond "administrators only"); **Proxy & SSO editing** for the Owner and the administrators they delegate it to: Authelia settings from the UI (session lifetimes, login ban, password policy, optional e-mail notifier) and raw Caddy/Authelia edits kept across regenerations (validated overrides); **OIDC clients**; **CrowdSec UI** (decisions, manual bans, alerts, allow-lists); **status dashboard and alerts**, with per-service CPU, memory and network graphs on the stack page, collected by Marineris itself, and alerts in the UI, by e-mail or by webhook (ntfy, Gotify, Discord); **live log streaming**; mount options beyond read-only (tmpfs, bind propagation, volume sub-paths, NFS/CIFS volumes) |
 | 3 | Backups (restic); **web terminal** inside containers (the stack page's Terminal tab: needs Docker `exec` through the socket proxy, with audit and step-up); stacks built from a Git repository or Dockerfile ("rebuild"); marketplace (Cosmos-compatible catalogs, compose templates, app icons); hub bookmarks to external sites |
 | 4 | Disk manager: SMART, mdadm RAID (incl. RAID10), privileged helper with a fixed command set |
 
