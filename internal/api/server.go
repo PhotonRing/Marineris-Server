@@ -326,6 +326,9 @@ func (s *Server) wrap(listener string, rt Route) http.Handler {
 				s.fail(w, r, err)
 				return
 			} else if !allowed {
+				// One entry per refusal, naming the route and the User.
+				rc.user = u
+				s.audit(r, rc, errNotAllowed.Code, rt.Method+" "+rt.Pattern, false, r.URL.Path)
 				writeError(w, errNotAllowed)
 				return
 			}

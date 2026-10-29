@@ -142,8 +142,50 @@ const ownerKey = "owner_user_id"
 
 // OwnerID returns the Owner's user ID, or 0 before first-run setup.
 func (s *Store) OwnerID(ctx context.Context) (int64, error) {
+	return ownerIn(ctx, s.db)
+}
+
+// ErrDisabled: the user is disabled.
+var ErrDisabled = errors.New("store: user disabled")
+
+// TransferOwnership makes to the Owner in place of from, who stays an
+// Administrator. The new Owner must be an enabled member of GroupAdmins
+// (ErrNotAdministrator, ErrDisabled); ErrConflict when from is no longer the
+// Owner (a concurrent handover won).
+func (s *Store) TransferOwnership(ctx context.Context, from, to int64) error {
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		var disabled bool
+		if err := tx.QueryRowContext(ctx, `SELECT disabled FROM users WHERE id = ?`, to).Scan(&disabled); err != nil {
+			return notFound(err)
+		}
+		in, err := isMember(ctx, tx, to, GroupAdmins)
+		switch {
+		case err != nil:
+			return err
+		case !in:
+			return ErrNotAdministrator
+		case disabled:
+			return ErrDisabled
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE settings SET value = ? WHERE key = ? AND value = ?`,
+			strconv.FormatInt(to, 10), ownerKey, strconv.FormatInt(from, 10))
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return ErrConflict
+		}
+		return nil
+	})
+}
+
+func ownerIn(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}) (int64, error) {
 	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, ownerKey).Scan(&v)
+	err := q.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, ownerKey).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
 	}

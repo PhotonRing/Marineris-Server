@@ -6,7 +6,7 @@
   import { onMount } from 'svelte';
   import { get, post, put, del, describe } from '../lib/api.js';
   import { path, navigate, link } from '../lib/router.js';
-  import { app, toast } from '../lib/state.svelte.js';
+  import { app, toast, loadSession } from '../lib/state.svelte.js';
   import Modal from '../components/Modal.svelte';
 
   const BUILTIN = ['admins', 'proxy-admins'];
@@ -30,6 +30,7 @@
   // another Administrator or on the Owner.
   let mayAct = $derived(!!user && (me || viewerIsOwner || (!user.owner && !user.groups.includes('admins'))));
   let builtins = $derived(user ? user.groups.filter((g) => BUILTIN.includes(g)) : []);
+  let isAdmin = $derived(!!user && user.groups.includes('admins'));
 
   function show(u) {
     user = u;
@@ -77,6 +78,39 @@
       toast('Groups saved');
     } catch (err) {
       groupError = describe(err);
+    } finally {
+      busy = '';
+    }
+  }
+
+  // Owner only (step-up): admins and proxy-admins. Leaving admins also leaves
+  // proxy-admins; the Owner always stays in admins.
+  async function setBuiltin(g, on) {
+    if (!on && g === 'admins' && user.groups.includes('proxy-admins') &&
+      !confirm(`${user.username} also stops being a Proxy & SSO Administrator. Continue?`)) return;
+    busy = 'builtin';
+    groupError = '';
+    try {
+      await (on ? put : del)(`/api/groups/${g}/members/${id}`);
+      show(await get(base));
+      toast('Saved');
+    } catch (err) {
+      groupError = describe(err);
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function makeOwner() {
+    if (!confirm(`Hand ownership to ${user.username}? You stay an Administrator, but only they will manage Administrators and the Owner.`)) return;
+    busy = 'owner';
+    try {
+      await post('/api/owner', { user_id: id });
+      await loadSession();
+      show(await get(base));
+      toast(`${user.username} is now the Owner`);
+    } catch (err) {
+      toast(describe(err), 'error');
     } finally {
       busy = '';
     }
@@ -151,7 +185,18 @@
     <div class="card">
       <h2>Groups</h2>
       {#if groupError}<div class="alert error">{groupError}</div>{/if}
-      {#if builtins.length}
+      {#if viewerIsOwner}
+        <label class="check">
+          <input type="checkbox" checked={isAdmin} disabled={user.owner || busy === 'builtin'}
+            onchange={(e) => setBuiltin('admins', e.currentTarget.checked)} />
+          Administrator <span class="muted small">(admins{user.owner ? '; the Owner always is one' : ''})</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" checked={user.groups.includes('proxy-admins')} disabled={!isAdmin || busy === 'builtin'}
+            onchange={(e) => setBuiltin('proxy-admins', e.currentTarget.checked)} />
+          Proxy &amp; SSO Administrator <span class="muted small">(proxy-admins; Administrators only)</span>
+        </label>
+      {:else if builtins.length}
         <p class="small">
           Built-in: {#each builtins as g (g)}<span class="badge">{g}</span> {/each}
           <span class="muted">(managed by the Owner)</span>
@@ -182,6 +227,17 @@
           Disabling keeps everything the User had (password, authenticator, passkeys, Groups) and signs them out
           everywhere. Deleting removes them for good.
         </p>
+      </div>
+    {/if}
+
+    {#if viewerIsOwner && !user.owner && isAdmin && user.state === 'active'}
+      <div class="card">
+        <h2>Ownership</h2>
+        <p class="small muted">
+          Hand ownership to {user.username}. You stay an Administrator; only the Owner manages Administrators and hands
+          ownership over.
+        </p>
+        <div class="row end"><button onclick={makeOwner} disabled={busy === 'owner'}>Make Owner…</button></div>
       </div>
     {/if}
   {/if}

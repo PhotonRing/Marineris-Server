@@ -4,6 +4,8 @@ DELETE /api/branding/{asset}                      stepup  admin  both
 DELETE /api/containers/{id}                       stepup  admin  both
 DELETE /api/dns/profiles/{id}                     stepup  admin  both
 DELETE /api/domains/{id}                          stepup  admin  both
+DELETE /api/groups/admins/members/{id}            stepup  owner  both
+DELETE /api/groups/proxy-admins/members/{id}      stepup  owner  both
 DELETE /api/groups/{name}                         stepup  admin  both
 DELETE /api/groups/{name}/members/{id}            authed  admin  both
 DELETE /api/links/{id}                            authed  admin  both
@@ -72,6 +74,7 @@ POST   /api/dns/profiles/{id}/test                authed  admin  both
 POST   /api/domains                               authed  admin  both
 POST   /api/groups                                authed  admin  both
 POST   /api/invites                               stepup  admin  both
+POST   /api/owner                                 stepup  owner  both
 POST   /api/routes                                authed  admin  both
 POST   /api/setup/begin                           setup   anyone local
 POST   /api/setup/finish                          setup   anyone local
@@ -99,6 +102,8 @@ PUT    /api/branding                              stepup  admin  both
 PUT    /api/branding/{asset}                      stepup  admin  both
 PUT    /api/dns/profiles/{id}                     stepup  admin  both
 PUT    /api/domains/{id}                          authed  admin  both
+PUT    /api/groups/admins/members/{id}            stepup  owner  both
+PUT    /api/groups/proxy-admins/members/{id}      stepup  owner  both
 PUT    /api/groups/{name}                         authed  admin  both
 PUT    /api/groups/{name}/members/{id}            authed  admin  both
 PUT    /api/routes/{id}                           authed  admin  both
