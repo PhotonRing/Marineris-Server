@@ -18,6 +18,18 @@ the list of commits and the image digests — then deletes merged branches.
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-10-29
+
+Signing in survives configuration changes and restarts.
+
+**Upgrading from 0.1.9:** check out `v0.1.10` in the source folder (its
+`compose.yml` adds Valkey), set `MARINERIS_IMAGE` and `MARINERIS_CADDY_IMAGE`
+in `.env` to the `0.1.10` tags, then
+`docker compose pull && docker compose up -d` (see the
+[upgrade runbook](https://github.com/PhotonRing/Marineris-Server/blob/main/docs/runbooks/upgrade.md)). `marineris-init` creates
+Valkey's password and data folder: nothing else to do by hand. Everyone signs
+in once more after this upgrade, then no longer after restarts.
+
 ### Fixed
 
 - **Editing a route signed everyone out.** Authelia kept sign-ins in its
@@ -28,10 +40,6 @@ the list of commits and the image digests — then deletes merged branches.
   restarts, Valkey's own and the server's, until the usual 30 min of
   inactivity or 12 h. Valkey is reachable by Authelia only, with a generated
   password, and runs as hardened as the rest of the stack.
-
-**Upgrading:** nothing to do by hand: the new compose file adds Valkey, and
-`marineris-init` creates its password and data folder. Everyone signs in
-once more after the upgrade.
 
 ## [0.1.9] - 2026-10-28
 
@@ -391,7 +399,8 @@ First public version: Phase 1.
   the real stack with a test ACME CA, gitleaks, govulncheck, Trivy, CodeQL,
   OWASP ZAP; multi-arch signed images with SBOM and provenance.
 
-[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/PhotonRing/Marineris-Server/compare/v0.1.6...v0.1.7
