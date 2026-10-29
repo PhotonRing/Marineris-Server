@@ -14,12 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/photonring/marineris-server/internal/config"
 	"github.com/photonring/marineris-server/internal/dnsprofiles"
 	"github.com/photonring/marineris-server/internal/docker"
 	"github.com/photonring/marineris-server/internal/secrets"
 	"github.com/photonring/marineris-server/internal/store"
-	"gopkg.in/yaml.v3"
 )
 
 type fakeCaddy struct {
