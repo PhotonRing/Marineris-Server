@@ -26,7 +26,7 @@ Signing in survives configuration changes and restarts.
 `compose.yml` adds Valkey), set `MARINERIS_IMAGE` and `MARINERIS_CADDY_IMAGE`
 in `.env` to the `0.1.10` tags, then
 `docker compose pull && docker compose up -d` (see the
-[upgrade runbook](docs/runbooks/upgrade.md)). `marineris-init` creates
+[upgrade runbook](https://github.com/PhotonRing/Marineris-Server/blob/main/docs/runbooks/upgrade.md)). `marineris-init` creates
 Valkey's password and data folder: nothing else to do by hand. Everyone signs
 in once more after this upgrade, then no longer after restarts.
 
