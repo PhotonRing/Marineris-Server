@@ -54,7 +54,7 @@ type Input struct {
 }
 
 // AdminsGroup is the Authelia group of Marineris administrators.
-const AdminsGroup = "admins"
+const AdminsGroup = store.GroupAdmins
 
 // Resource is a host, optionally narrowed to a path prefix ("/app"), that
 // needs a two-factor login; AdminOnly restricts it to AdminsGroup.
@@ -190,6 +190,10 @@ func configDoc(in Input) m {
 		},
 		"authentication_backend": m{
 			"password_reset": m{"disable": true},
+			// Re-read the User on every request (cheap with the file
+			// backend): disabling a User or changing their Groups takes
+			// effect on their next request, open sessions included.
+			"refresh_interval": "always",
 			"file": m{
 				"path":  UsersFile,
 				"watch": true,

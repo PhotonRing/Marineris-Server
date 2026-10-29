@@ -47,6 +47,13 @@ func (s *Server) autheliaSession(w http.ResponseWriter, r *http.Request, rc *req
 	if err != nil {
 		return nil, nil, err
 	}
+	if refusal := signInRefused(nu); refusal != nil {
+		// Authelia re-reads the users file on every request, so this only
+		// happens in the moment before it notices.
+		rc.user = nu
+		s.audit(r, rc, "login", nu.Username, false, refusal.Code+" (authelia)")
+		return nil, nil, refusal
+	}
 	ns, err := s.Sessions.Create(ctx, w, r, nu.ID, auth.MethodAuthelia)
 	if err != nil {
 		return nil, nil, err

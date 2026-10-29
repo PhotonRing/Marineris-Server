@@ -97,6 +97,58 @@ button.primary {
   color: #fff;
 }
 
+.small {
+  font-size: 0.85rem;
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  text-align: left;
+}
+
+.form label {
+  display: grid;
+  gap: 4px;
+}
+
+.form input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.form label.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.qr {
+  justify-self: center;
+  width: 180px;
+  height: 180px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+
+code {
+  word-break: break-all;
+}
+
 [hidden] {
   display: none !important;
 }

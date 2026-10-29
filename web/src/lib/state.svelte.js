@@ -54,9 +54,11 @@ export async function loadSession() {
   }
 }
 
-export function setSession(s) {
+// setSession takes the answer of a sign-in and loads the full session, which
+// carries the User's rights; the sign-in answer does not.
+export async function setSession(s) {
   setCsrf(s.csrf_token);
-  app.session = s;
+  await loadSession();
 }
 
 export async function logout() {
@@ -81,7 +83,7 @@ export async function passkeyLogin() {
   const begin = await post('/api/auth/passkey/begin');
   const cred = await getPasskey(begin.options);
   const res = await api('POST', '/api/auth/passkey/finish?ceremony=' + encodeURIComponent(begin.ceremony), JSON.stringify(cred), { raw: true });
-  setSession(res);
+  await setSession(res);
   return res;
 }
 

@@ -241,6 +241,17 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request, rc *r
 		next.HubBackground = req.HubBackground
 	}
 	ctx := r.Context()
+	if next.UIProtectWithAuthelia != rc.settings.UIProtectWithAuthelia || next.AuthSubdomain != rc.settings.AuthSubdomain {
+		// How Authelia protects the UI is the Owner's or a Proxy & SSO
+		// Administrator's to change.
+		allowed, err := s.allowed(ctx, rc.user, ProxyAdmin)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return s.auditRefusal(r, rc, "settings.update", "authelia", "ui_protect_with_authelia or auth_subdomain: ", errNotAllowed)
+		}
+	}
 	if next.UIHost != "" {
 		if err := validate.Hostname(next.UIHost); err != nil {
 			return fieldError("ui_host", err.Error())
@@ -303,31 +314,6 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request, rc *reqCtx)
 		entries = []*store.AuditEntry{}
 	}
 	return ok(w, entries)
-}
-
-// handleAutheliaNotification shows the last message Authelia's filesystem
-// notifier wrote (one-time codes used when enrolling 2FA in Authelia).
-func (s *Server) handleAutheliaNotification(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
-	p := filepath.Join(s.Config.DataDir, "authelia-notify", "notification.txt")
-	st, err := os.Stat(p)
-	if errors.Is(err, os.ErrNotExist) {
-		return ok(w, map[string]any{"present": false})
-	}
-	if err != nil {
-		return err
-	}
-	f, err := os.Open(p) //nolint:gosec // fixed path below the data directory
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	const max = 8 << 10
-	if st.Size() > max {
-		_, _ = f.Seek(st.Size()-max, 0)
-	}
-	b := make([]byte, max)
-	n, _ := f.Read(b)
-	return ok(w, map[string]any{"present": true, "modified_at": st.ModTime().UTC(), "content": string(b[:n])})
 }
 
 // --- DNS profiles ----------------------------------------------------------

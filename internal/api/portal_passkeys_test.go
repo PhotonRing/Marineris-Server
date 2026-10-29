@@ -28,6 +28,9 @@ type fakeAutheliaPasskeys struct {
 	handles map[string]string // rpid/username → user handle
 	keys    []configmgr.AutheliaPasskey
 	added   []configmgr.NewAutheliaPasskey
+	// failAdd, when set, is what AddAutheliaPasskey answers (Authelia's
+	// import failing).
+	failAdd error
 }
 
 func (f *fakeAutheliaPasskeys) AutheliaPasskeys(_ context.Context, username string) ([]configmgr.AutheliaPasskey, error) {
@@ -54,6 +57,9 @@ func (f *fakeAutheliaPasskeys) AutheliaUserHandle(_ context.Context, rpid, usern
 func (f *fakeAutheliaPasskeys) AddAutheliaPasskey(_ context.Context, p configmgr.NewAutheliaPasskey) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.failAdd != nil {
+		return f.failAdd
+	}
 	if f.handles == nil {
 		f.handles = map[string]string{}
 	}
@@ -77,6 +83,32 @@ func (f *fakeAutheliaPasskeys) DeleteAutheliaPasskey(_ context.Context, username
 		}
 	}
 	return store.ErrNotFound
+}
+
+func (f *fakeAutheliaPasskeys) DeleteAutheliaUser(ctx context.Context, username string) error {
+	_ = f.DeleteAutheliaSecondFactors(ctx, username)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for k := range f.handles {
+		if strings.HasSuffix(k, "/"+username) {
+			delete(f.handles, k)
+		}
+	}
+	return nil
+}
+
+// DeleteAutheliaSecondFactors removes the User's passkeys (the fake keeps no
+// authenticator); the user handle stays.
+func (f *fakeAutheliaPasskeys) DeleteAutheliaSecondFactors(_ context.Context, username string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.keys) - 1; i >= 0; i-- {
+		if f.added[i].Username == username {
+			f.keys = append(f.keys[:i], f.keys[i+1:]...)
+			f.added = append(f.added[:i], f.added[i+1:]...)
+		}
+	}
+	return nil
 }
 
 // authenticator is a software passkey ("none" attestation, ES256).

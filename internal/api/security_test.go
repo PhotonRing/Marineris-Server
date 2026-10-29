@@ -19,7 +19,8 @@ import (
 
 var update = flag.Bool("update-golden", false, "rewrite golden files")
 
-// TestRouteTableGolden pins the list of endpoints and their access levels.
+// TestRouteTableGolden pins the list of endpoints, their access levels and
+// who may call them.
 // Adding, removing or relaxing an endpoint fails this test until the golden
 // file is updated (go test ./internal/api -run Golden -update-golden), which makes
 // every change to the attack surface visible in review.
@@ -33,7 +34,7 @@ func TestRouteTableGolden(t *testing.T) {
 		} else if r.Access == Ticket {
 			where = "edge"
 		}
-		lines = append(lines, fmt.Sprintf("%-6s %-42s %-7s %s", r.Method, r.Pattern, r.Access, where))
+		lines = append(lines, fmt.Sprintf("%-6s %-42s %-7s %-6s %s", r.Method, r.Pattern, r.Access, r.Who, where))
 	}
 	sort.Strings(lines)
 	got := strings.Join(lines, "\n") + "\n"

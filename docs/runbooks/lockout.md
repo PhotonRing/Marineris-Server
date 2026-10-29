@@ -10,7 +10,7 @@ command is written to the audit log.
 | Lost a device with a passkey | log in with password + TOTP and remove it in **Account**, or `docker exec marineris marineris admin remove-passkeys <user>` |
 | Suspect a stolen session | `docker exec marineris marineris admin revoke-sessions <user>` |
 | "Too many failed attempts" on the public UI | use the [break-glass](break-glass.md) listener (not affected); public lockouts expire after at most 1 hour |
-| List administrators | `docker exec marineris marineris admin users` |
+| List users, their groups and the owner | `docker exec marineris marineris admin users` |
 
 After `reset-password` or `reset-mfa`, restart Marineris
 (`docker restart marineris`) so the new password or authenticator also

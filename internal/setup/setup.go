@@ -222,14 +222,11 @@ func (s *Service) Finish(ctx context.Context, req Request) (*Result, error) {
 		TOTPLastStep:  step,
 		RecoveryCodes: hashes,
 		WebAuthnID:    handle,
-		Role:          "admin",
 	}
-	if n, err := s.store.CountUsers(ctx); err != nil {
-		return nil, err
-	} else if n != 0 {
+	// The first user is the Owner and an Administrator.
+	if err := s.store.CreateOwner(ctx, u); errors.Is(err, store.ErrConflict) {
 		return nil, ErrAlreadyComplete
-	}
-	if err := s.store.CreateUser(ctx, u); err != nil {
+	} else if err != nil {
 		return nil, err
 	}
 	if _, err := s.store.UpdateSettings(ctx, func(st *store.Settings) error {

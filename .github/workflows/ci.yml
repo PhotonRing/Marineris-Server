@@ -12,9 +12,10 @@ name: CI
 
 # Runners: the test and scan jobs run on the project's self-hosted runners,
 # except for pull requests from forks (anyone's code: GitHub's runners). The
-# image jobs (build, Trivy, real tools, integration) always run on GitHub's
-# runners: the build cache is next to them, and the integration test takes
-# the names, ports and volumes of a real installation. See
+# image jobs (build, Trivy, real tools, integration, e2e-stack) always run on
+# GitHub's runners: the build cache is next to them, and the integration and
+# real-stack browser tests take the names, ports and volumes of a real
+# installation. See
 # docs/runbooks/ci-runner.md.
 
 on:
@@ -54,7 +55,8 @@ jobs:
       e2e: ${{ steps.areas.outputs.e2e }}
       caddy: ${{ steps.areas.outputs.caddy }}
       deploy: ${{ steps.areas.outputs.deploy }}
-      images: ${{ steps.areas.outputs.go == 'true' || steps.areas.outputs.web == 'true' || steps.areas.outputs.caddy == 'true' || steps.areas.outputs.deploy == 'true' }}
+      # e2e too: the real-stack browser tests (e2e-stack) run on the images.
+      images: ${{ steps.areas.outputs.go == 'true' || steps.areas.outputs.web == 'true' || steps.areas.outputs.caddy == 'true' || steps.areas.outputs.deploy == 'true' || steps.areas.outputs.e2e == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -116,11 +118,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
           cache-dependency-path: web/package-lock.json
-      - name: Web UI type check
+      - name: Web UI type check and build scripts' tests
         working-directory: web
         run: |
           npm ci --no-audit --no-fund
           npm run check
+          npm run test:scripts
 
   secrets:
     name: Secret scanning (gitleaks, full history)
@@ -401,6 +404,55 @@ jobs:
         with:
           name: integration-logs
           path: test/integration/logs
+
+  e2e-stack:
+    name: Browser end-to-end on the real stack (demo.sh)
+    needs: [changes, images]
+    if: needs.changes.outputs.images == 'true'
+    # Always on GitHub's runners: the demo takes the names and ports 80/443
+    # of a real installation, and is deleted afterwards.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: images
+          path: ${{ runner.temp }}/images
+      - name: Start the demo with this run's images
+        run: |
+          for f in "$RUNNER_TEMP"/images/*.tar; do docker load -i "$f"; done
+          docker tag marineris:dev marineris:demo
+          docker tag marineris-caddy:dev marineris-caddy:demo
+          SKIP_BUILD=1 deploy/demo/demo.sh up
+      - name: Run Playwright against the stack
+        working-directory: test/e2e
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npx playwright test -c playwright.stack.config.js
+      - if: failure()
+        name: Container logs
+        run: |
+          mkdir -p test/e2e/playwright-report/logs
+          for c in marineris marineris-caddy marineris-authelia marineris-valkey; do
+            docker logs "$c" > "test/e2e/playwright-report/logs/$c.log" 2>&1 || true
+          done
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-stack-report
+          path: |
+            test/e2e/playwright-report
+            test/e2e/test-results
+      - if: always()
+        name: Stop the demo
+        run: deploy/demo/demo.sh down
 
   real-tools:
     name: Generated configs vs. real Caddy & Authelia

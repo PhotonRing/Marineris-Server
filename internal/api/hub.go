@@ -106,7 +106,15 @@ func (ir *iconResolver) url(rt *store.Route) string {
 	return "/api/hub/icons/" + strconv.FormatInt(rt.ID, 10) + "?v=" + strconv.FormatInt(version.UnixNano(), 36)
 }
 
-// handleHub returns the launcher tiles: every enabled, visible route.
+// onHub reports whether a route is a tile on the User's Hub: enabled,
+// visible, and one they may open (admins-only routes only for
+// Administrators; public and signed-in routes for everyone).
+func onHub(u *store.User, rt *store.Route) bool {
+	return rt.Enabled && rt.Hub.Visible && (rt.Auth != store.AuthAdmins || u.IsAdministrator())
+}
+
+// handleHub returns the launcher tiles: every route on the User's Hub. The
+// system widgets are only for Administrators.
 func (s *Server) handleHub(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
 	routes, err := s.Store.ListRoutes(r.Context())
 	if err != nil {
@@ -118,7 +126,7 @@ func (s *Server) handleHub(w http.ResponseWriter, r *http.Request, rc *reqCtx) e
 	}
 	tiles := []hubTile{}
 	for _, rt := range routes {
-		if !rt.Enabled || !rt.Hub.Visible {
+		if !onHub(rc.user, rt) {
 			continue
 		}
 		t := hubTile{ID: rt.ID, Title: rt.Hub.Title, Subtitle: rt.Hub.Subtitle, URL: "https://" + rt.Host + rt.PathPrefix + "/", Auth: rt.Auth}
@@ -130,9 +138,13 @@ func (s *Server) handleHub(w http.ResponseWriter, r *http.Request, rc *reqCtx) e
 	}
 	sort.SliceStable(tiles, func(i, j int) bool { return strings.ToLower(tiles[i].Title) < strings.ToLower(tiles[j].Title) })
 	st := rc.settings
+	widgets := []string{}
+	if rc.user.IsAdministrator() && st.HubWidgets != nil {
+		widgets = st.HubWidgets
+	}
 	return ok(w, map[string]any{
 		"title":      st.HubTitle,
-		"widgets":    st.HubWidgets,
+		"widgets":    widgets,
 		"background": st.HubBackground,
 		"tiles":      tiles,
 	})
@@ -147,6 +159,11 @@ func (s *Server) handleHubIcon(w http.ResponseWriter, r *http.Request, rc *reqCt
 	rt, err := s.Store.GetRoute(ctx, id)
 	if err != nil {
 		return err
+	}
+	// Administrators see every route's icon (the Routes page shows them);
+	// anyone else only those of their own tiles, as if the rest did not exist.
+	if !rc.user.IsAdministrator() && !onHub(rc.user, rt) {
+		return store.ErrNotFound
 	}
 	ir, err := s.newIconResolver(ctx)
 	if err != nil {

@@ -1,0 +1,350 @@
+<script>
+  // One User: display name and e-mail (the Username never changes), custom
+  // Groups, disable or enable, Reset link, delete. Only the Owner acts on
+  // Administrators and on the Owner; the buttons follow that rule, the API
+  // enforces it.
+  import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+  import { onMount } from 'svelte';
+  import { get, post, put, del, describe } from '../lib/api.js';
+  import { path, navigate, link } from '../lib/router.js';
+  import { app, toast, loadSession } from '../lib/state.svelte.js';
+  import Modal from '../components/Modal.svelte';
+  import LinkDialog from '../components/LinkDialog.svelte';
+
+  const RESETS = {
+    password: 'Password',
+    second_factor: 'Second factor (authenticator and passkeys)',
+    both: 'Password and second factor',
+  };
+
+  const BUILTIN = ['admins', 'proxy-admins'];
+  const id = Number($path.split('/')[2] || 0);
+  const base = `/api/users/${id}`;
+
+  let user = $state(null);
+  let error = $state('');
+  let form = $state({ display_name: '', email: '' });
+  let formError = $state('');
+  let groupNames = $state([]); // every custom Group
+  let chosen = $state([]); // the User's custom Groups being edited
+  let groupError = $state('');
+  let busy = $state('');
+  let deleteOpen = $state(false);
+  let deleteConfirm = $state('');
+  let resetOpen = $state(false);
+  let resets = $state('password');
+  let resetLink = $state(null); // the Reset link just created, with its URL
+  let resetLinkOpen = $state(false);
+
+  let me = $derived(app.session?.user?.id === id);
+  let viewerIsOwner = $derived(!!app.session?.rights?.owner);
+  // Same rule as the API (mayActOn): an Administrator does not act on
+  // another Administrator or on the Owner.
+  let mayAct = $derived(!!user && (me || viewerIsOwner || (!user.owner && !user.groups.includes('admins'))));
+  let builtins = $derived(user ? user.groups.filter((g) => BUILTIN.includes(g)) : []);
+  let isAdmin = $derived(!!user && user.groups.includes('admins'));
+
+  function show(u) {
+    user = u;
+    form = { display_name: u.display_name, email: u.email };
+    chosen = u.groups.filter((g) => !BUILTIN.includes(g));
+  }
+
+  onMount(async () => {
+    try {
+      show(await get(base));
+    } catch (err) {
+      error = describe(err);
+      return;
+    }
+    try {
+      groupNames = (await get('/api/groups')).filter((g) => !g.builtin).map((g) => g.name);
+    } catch (err) {
+      groupError = describe(err);
+    }
+  });
+
+  async function saveProfile(e) {
+    e.preventDefault();
+    busy = 'profile';
+    formError = '';
+    try {
+      show(await put(base, { display_name: form.display_name, email: form.email }));
+      toast('Saved');
+    } catch (err) {
+      formError = describe(err);
+    } finally {
+      busy = '';
+    }
+  }
+
+  function toggle(g) {
+    chosen = chosen.includes(g) ? chosen.filter((x) => x !== g) : [...chosen, g];
+  }
+
+  async function saveGroups() {
+    busy = 'groups';
+    groupError = '';
+    try {
+      show(await put(`${base}/groups`, { groups: chosen }));
+      toast('Groups saved');
+    } catch (err) {
+      groupError = describe(err);
+    } finally {
+      busy = '';
+    }
+  }
+
+  // Owner only (step-up): admins and proxy-admins. Leaving admins also leaves
+  // proxy-admins; the Owner always stays in admins.
+  async function setBuiltin(g, on) {
+    if (!on && g === 'admins' && user.groups.includes('proxy-admins') &&
+      !confirm(`${user.username} also stops being a Proxy & SSO Administrator. Continue?`)) return;
+    busy = 'builtin';
+    groupError = '';
+    try {
+      await (on ? put : del)(`/api/groups/${g}/members/${id}`);
+      show(await get(base));
+      toast('Saved');
+    } catch (err) {
+      groupError = describe(err);
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function makeOwner() {
+    if (!confirm(`Hand ownership to ${user.username}? You stay an Administrator, but only they will manage Administrators and the Owner.`)) return;
+    busy = 'owner';
+    try {
+      await post('/api/owner', { user_id: id });
+      await loadSession();
+      show(await get(base));
+      toast(`${user.username} is now the Owner`);
+    } catch (err) {
+      toast(describe(err), 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function setDisabled(disabled) {
+    if (disabled && !confirm(`Disable ${user.username}? They are signed out everywhere and can no longer sign in.`)) return;
+    busy = 'state';
+    try {
+      show(await post(`${base}/${disabled ? 'disable' : 'enable'}`));
+      toast(disabled ? `${user.username} disabled` : `${user.username} enabled`);
+    } catch (err) {
+      toast(describe(err), 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  // A Reset link (step-up): the User is signed out everywhere and blocked
+  // until they use it or it is revoked. A new one replaces a pending one.
+  async function createReset() {
+    busy = 'reset';
+    try {
+      resetLink = await post(`${base}/reset`, { resets });
+      resetOpen = false;
+      resetLinkOpen = true;
+      show(await get(base));
+    } catch (err) {
+      toast(describe(err), 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function revokeReset() {
+    if (!confirm(`Revoke the Reset link? ${user.username} can sign in again with their old credentials.`)) return;
+    busy = 'reset';
+    try {
+      await del(`/api/links/${user.reset.id}`);
+      show(await get(base));
+      toast('Reset link revoked');
+    } catch (err) {
+      toast(describe(err), 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  const when = (t) => new Date(t).toLocaleString();
+
+  async function remove() {
+    busy = 'delete';
+    try {
+      const r = await del(base);
+      toast(`${user.username} deleted`);
+      if (r?.warning) toast(r.warning, 'error');
+      deleteOpen = false;
+      navigate('/users');
+    } catch (err) {
+      toast(describe(err), 'error');
+    } finally {
+      busy = '';
+    }
+  }
+</script>
+
+<div class="stack">
+  <div><a href="/users" use:link class="row small"><ArrowLeft size={14} aria-hidden="true" />Users</a></div>
+  {#if error}<div class="alert error">{error}</div>{/if}
+
+  {#if user}
+    <div class="card">
+      <div class="spread">
+        <h2>
+          {user.display_name}
+          {#if user.owner}<span class="badge ok">Owner</span>{/if}
+          <span class="badge {{ active: 'ok', 'reset pending': 'warn' }[user.state] || 'error'}">{user.state}</span>
+        </h2>
+      </div>
+      {#if !mayAct}
+        <div class="alert">Only the Owner manages Administrators and the Owner.</div>
+      {/if}
+      <form onsubmit={saveProfile} class="stack">
+        {#if formError}<div class="alert error">{formError}</div>{/if}
+        <div class="field">
+          <label for="un">Username</label>
+          <input id="un" value={user.username} disabled />
+          <div class="help">A Username never changes: sessions, passkeys and app accounts are tied to it.</div>
+        </div>
+        <div class="field">
+          <label for="dn">Display name</label>
+          <input id="dn" bind:value={form.display_name} maxlength="64" required disabled={!mayAct} />
+        </div>
+        <div class="field">
+          <label for="em">E-mail</label>
+          <input id="em" type="email" bind:value={form.email} placeholder="optional" disabled={!mayAct} />
+        </div>
+        {#if mayAct}
+          <div class="row end"><button class="primary" type="submit" disabled={busy === 'profile'}>Save</button></div>
+        {/if}
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Groups</h2>
+      {#if groupError}<div class="alert error">{groupError}</div>{/if}
+      {#if viewerIsOwner}
+        <label class="check">
+          <input type="checkbox" checked={isAdmin} disabled={user.owner || busy === 'builtin'}
+            onchange={(e) => setBuiltin('admins', e.currentTarget.checked)} />
+          Administrator <span class="muted small">(admins{user.owner ? '; the Owner always is one' : ''})</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" checked={user.groups.includes('proxy-admins')} disabled={!isAdmin || busy === 'builtin'}
+            onchange={(e) => setBuiltin('proxy-admins', e.currentTarget.checked)} />
+          Proxy &amp; SSO Administrator <span class="muted small">(proxy-admins; Administrators only)</span>
+        </label>
+      {:else if builtins.length}
+        <p class="small">
+          Built-in: {#each builtins as g (g)}<span class="badge">{g}</span> {/each}
+          <span class="muted">(managed by the Owner)</span>
+        </p>
+      {/if}
+      {#each groupNames as g (g)}
+        <label class="check"><input type="checkbox" checked={chosen.includes(g)} disabled={!mayAct} onchange={() => toggle(g)} /> {g}</label>
+      {:else}
+        <p class="small muted">No custom Groups yet.</p>
+      {/each}
+      {#if mayAct && groupNames.length}
+        <div class="row end"><button onclick={saveGroups} disabled={busy === 'groups'}>Save Groups</button></div>
+      {/if}
+    </div>
+
+    {#if mayAct && !me}
+      <div class="card">
+        <h2>Access</h2>
+        <div class="row">
+          {#if user.state === 'disabled'}
+            <button onclick={() => setDisabled(false)} disabled={busy === 'state'}>Enable</button>
+          {:else}
+            <button onclick={() => setDisabled(true)} disabled={busy === 'state'}>Disable</button>
+          {/if}
+          <button class="danger" onclick={() => ((deleteConfirm = ''), (deleteOpen = true))}>Delete…</button>
+        </div>
+        <p class="small muted">
+          Disabling keeps everything the User had (password, authenticator, passkeys, Groups) and signs them out
+          everywhere. Deleting removes them for good.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Reset link</h2>
+        {#if user.reset}
+          <div class="alert">
+            A Reset link for the {RESETS[user.reset.resets].toLowerCase()} is pending
+            {#if user.reset.expired}(it expired on {when(user.reset.expires_at)}){:else}until {when(user.reset.expires_at)}{/if}.
+            {user.username} cannot sign in until it is used or revoked.
+          </div>
+        {/if}
+        <p class="small muted">
+          For someone who lost their password or phone. They are signed out everywhere and cannot sign in until they
+          open the link and set what it resets. Revoking it lets them sign in again with their old credentials.
+        </p>
+        <div class="row end">
+          {#if user.reset}
+            <button onclick={revokeReset} disabled={busy === 'reset'}>Revoke</button>
+          {/if}
+          <button onclick={() => ((resets = 'password'), (resetOpen = true))} disabled={busy === 'reset'}>
+            {user.reset ? 'New Reset link…' : 'Create a Reset link…'}
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if viewerIsOwner && !user.owner && isAdmin && user.state === 'active'}
+      <div class="card">
+        <h2>Ownership</h2>
+        <p class="small muted">
+          Hand ownership to {user.username}. You stay an Administrator; only the Owner manages Administrators and hands
+          ownership over.
+        </p>
+        <div class="row end"><button onclick={makeOwner} disabled={busy === 'owner'}>Make Owner…</button></div>
+      </div>
+    {/if}
+  {/if}
+</div>
+
+<Modal bind:open={resetOpen} title="Reset link for {user?.username}">
+  <fieldset class="stack">
+    <legend>What it resets</legend>
+    {#each Object.entries(RESETS) as [value, label] (value)}
+      <label class="check"><input type="radio" name="resets" {value} bind:group={resets} /> {label}</label>
+    {/each}
+  </fieldset>
+  <p class="small muted">
+    {user?.username} is signed out everywhere at once.
+    {#if resets !== 'password'}Their old authenticator and passkeys stop working when they use the link.{/if}
+    {#if user?.reset}The pending Reset link stops working.{/if}
+  </p>
+  {#snippet actions()}
+    <button onclick={() => (resetOpen = false)}>Cancel</button>
+    <button class="primary" onclick={createReset} disabled={busy === 'reset'}>Create the Reset link</button>
+  {/snippet}
+</Modal>
+
+<LinkDialog bind:open={resetLinkOpen} title="Reset link created" url={resetLink?.url || ''}>
+  {#if resetLink}
+    <p>
+      Send this link to <strong>{resetLink.display_name}</strong>. It opens on the sign-in portal, where they set their
+      {RESETS[resetLink.resets].toLowerCase()}. It works once, until {when(resetLink.expires_at)}.
+    </p>
+  {/if}
+</LinkDialog>
+
+<Modal bind:open={deleteOpen} title="Delete {user?.username}">
+  <p>Their passkeys, authenticator, Group memberships and sessions are removed. This cannot be undone.</p>
+  <div class="field">
+    <label for="dc">Type the Username to confirm</label>
+    <input id="dc" bind:value={deleteConfirm} autocomplete="off" />
+  </div>
+  {#snippet actions()}
+    <button onclick={() => (deleteOpen = false)}>Cancel</button>
+    <button class="danger" onclick={remove} disabled={deleteConfirm !== user?.username || busy === 'delete'}>Delete</button>
+  {/snippet}
+</Modal>

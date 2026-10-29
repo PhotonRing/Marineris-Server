@@ -19,9 +19,14 @@ var (
 	labelRE     = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	containerRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
 	stackRE     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
+	groupRE     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,31}$`)
 	folderRE    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 	pathRE      = regexp.MustCompile(`^(/[A-Za-z0-9._~-]+)+$`)
-	nameRE      = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N} ._()-]{0,63}$`)
+	nameRE      = regexp.MustCompile(`^[\p{L}\p{N}]([\p{L}\p{N} ._()-]{0,62}[\p{L}\p{N}._()-])?$`)
+	personRE    = regexp.MustCompile(`^[\p{L}\p{N}]([\p{L}\p{N} ._()'’-]{0,62}[\p{L}\p{N}._()'’-])?$`)
+	usernameRE  = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,31}$`)
+	localPartRE = regexp.MustCompile(`^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*$`)
+	asciiHostRE = regexp.MustCompile(`^[A-Za-z0-9.-]+$`)
 	durationRE  = regexp.MustCompile(`^[1-9][0-9]{0,4}(ms|s|m|h)$`)
 )
 
@@ -117,10 +122,57 @@ func FolderName(n string) error {
 	return nil
 }
 
-// DisplayName validates a human-readable name (profiles, routes).
+// GroupName validates the name of a custom Group: it lands in Authelia's
+// users file and, later, in OIDC groups claims. The built-in names are
+// reserved.
+func GroupName(n string) error {
+	if !groupRE.MatchString(n) {
+		return errors.New("must be 2-32 characters: lowercase letters, digits, '_' or '-', starting with a letter or digit")
+	}
+	if n == "admins" || n == "proxy-admins" {
+		return errors.New("is reserved for a built-in Group")
+	}
+	return nil
+}
+
+// DisplayName validates a human-readable name: a route's, a DNS profile's or
+// a passkey's. Spaces only inside.
 func DisplayName(n string) error {
 	if !nameRE.MatchString(n) {
-		return errors.New("must be 1-64 characters: letters, digits, spaces, '.', '_', '(', ')' or '-'")
+		return errors.New("must be 1-64 characters: letters, digits, spaces, '.', '_', '(', ')' or '-', starting with a letter or digit")
+	}
+	return nil
+}
+
+// UserDisplayName validates a User's display name: DisplayName's characters
+// plus the apostrophe (' or ’) that people's names carry (O'Brien). Authelia's
+// users file is written by a YAML encoder, which quotes it.
+func UserDisplayName(n string) error {
+	if !personRE.MatchString(n) {
+		return errors.New("must be 1-64 characters: letters, digits, spaces, apostrophes, '.', '_', '(', ')' or '-', starting with a letter or digit")
+	}
+	return nil
+}
+
+// Username validates a new Username: what works as one in Authelia and in
+// every app. Uniqueness (ignoring case) is the store's check.
+func Username(n string) error {
+	if !usernameRE.MatchString(n) {
+		return errors.New("must be 2-32 characters: lowercase letters, digits, '.', '_' or '-', starting with a letter or digit")
+	}
+	return nil
+}
+
+// Email validates an e-mail address of the common form local@host.domain:
+// the local part letters, digits, '_', '+', '-' and inner single dots; the
+// domain a fully-qualified hostname in any case. Quoted local parts, IP
+// literals and names around the address are refused.
+func Email(e string) error {
+	const msg = "must be an e-mail address like name@example.com"
+	local, domain, found := strings.Cut(e, "@")
+	if !found || len(e) > 254 || len(local) > 64 || !localPartRE.MatchString(local) ||
+		!asciiHostRE.MatchString(domain) || Hostname(strings.ToLower(domain)) != nil {
+		return errors.New(msg)
 	}
 	return nil
 }

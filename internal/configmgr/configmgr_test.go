@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/photonring/marineris-server/internal/config"
 	"github.com/photonring/marineris-server/internal/dnsprofiles"
@@ -111,7 +114,7 @@ func setup(t *testing.T) (*Manager, *store.Store, *fakeCaddy, *fakeDocker) {
 	if err := st.CreateDomain(ctx, &store.Domain{Name: "example.com", DNSProfileID: &p.ID, Wildcard: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateUser(ctx, &store.User{Username: "admin", PasswordHash: "$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g", WebAuthnID: []byte("x"), Role: "admin"}); err != nil {
+	if err := st.CreateOwner(ctx, &store.User{Username: "admin", PasswordHash: testHash, WebAuthnID: []byte("x")}); err != nil {
 		t.Fatal(err)
 	}
 	fc, fd := &fakeCaddy{}, &fakeDocker{}
@@ -265,6 +268,113 @@ func TestApplyAutheliaValidatesAndRestarts(t *testing.T) {
 	}
 	if len(fd.runs) != 2 || fd.restarts != 1 {
 		t.Fatalf("users change: runs=%d restarts=%d", len(fd.runs), fd.restarts)
+	}
+}
+
+const testHash = "$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g"
+
+func TestAutheliaUsersFileFollowsGroups(t *testing.T) {
+	m, st, _, _ := setup(t)
+	ctx := context.Background()
+	if err := st.CreateGroup(ctx, "family"); err != nil {
+		t.Fatal(err)
+	}
+	carol := &store.User{Username: "carol", DisplayName: "Carol C.", Email: "carol@example.org", PasswordHash: testHash, WebAuthnID: []byte("c")}
+	dave := &store.User{Username: "dave", PasswordHash: testHash, WebAuthnID: []byte("d"), Disabled: true}
+	for _, u := range []*store.User{carol, dave} {
+		if err := st.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, g := range []string{"family", store.GroupProxyAdmins, store.GroupAdmins} {
+		if err := st.AddGroupMember(ctx, carol.ID, g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.EnsureAutheliaFiles(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ApplyAuthelia(ctx, "admin", "groups"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(m.cfg.AutheliaDir(), "users_database.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Users map[string]struct {
+			Disabled    bool     `yaml:"disabled"`
+			DisplayName string   `yaml:"displayname"`
+			Email       string   `yaml:"email"`
+			Groups      []string `yaml:"groups"`
+		} `yaml:"users"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for name, u := range doc.Users {
+		got[name] = fmt.Sprintf("%s|%s|%v|disabled=%v", u.DisplayName, u.Email, u.Groups, u.Disabled)
+	}
+	want := map[string]string{
+		"admin": "admin|ops@example.com|[admins]|disabled=false",
+		"carol": "Carol C.|carol@example.org|[admins family proxy-admins]|disabled=false",
+		"dave":  "dave|ops@example.com|[]|disabled=true",
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("users file:\n got  %v\n want %v", got, want)
+	}
+}
+
+// The UI behind Authelia opens for every signed-in User: non-Administrators
+// see their Hub and Account there, and the API refuses them everything else.
+// Administrators-only routes stay closed to them in Authelia.
+func TestAutheliaLetsEveryUserReachTheUI(t *testing.T) {
+	m, st, _, _ := setup(t)
+	ctx := context.Background()
+	if _, err := st.UpdateSettings(ctx, func(s *store.Settings) error {
+		s.UIProtectWithAuthelia = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateRoute(ctx, &store.Route{Name: "ops", Host: "ops.example.com", Kind: store.RouteContainer,
+		Target: store.RouteTarget{Container: "web", Port: 80}, Auth: store.AuthAdmins, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.EnsureAutheliaFiles(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ApplyAuthelia(ctx, "admin", "ui"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(m.cfg.AutheliaDir(), "configuration.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		AccessControl struct {
+			Rules []struct {
+				Domain  []string `yaml:"domain"`
+				Policy  string   `yaml:"policy"`
+				Subject []string `yaml:"subject"`
+			} `yaml:"rules"`
+		} `yaml:"access_control"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range doc.AccessControl.Rules {
+		got = append(got, fmt.Sprintf("%v %s %v", r.Domain, r.Policy, r.Subject))
+	}
+	want := []string{
+		"[marineris.example.com] two_factor []",
+		"[ops.example.com] two_factor [group:admins]",
+		"[ops.example.com] deny []",
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("access rules:\n got  %v\n want %v", got, want)
 	}
 }
 

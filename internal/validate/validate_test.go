@@ -3,6 +3,7 @@ package validate
 import (
 	"strings"
 	"testing"
+	"unicode"
 )
 
 func TestHostname(t *testing.T) {
@@ -74,9 +75,54 @@ func TestNames(t *testing.T) {
 	if DisplayName("OVH account (main)") != nil || DisplayName("Économie 2") != nil {
 		t.Fatal("valid display name rejected")
 	}
-	for _, n := range []string{"", " lead", "<script>", "a\"b", strings.Repeat("x", 65)} {
+	for _, n := range []string{"", " lead", "trail ", "<script>", "a\"b", "O'Brien", "a\nb", strings.Repeat("x", 65)} {
 		if DisplayName(n) == nil {
 			t.Errorf("display name %q accepted", n)
+		}
+	}
+	for _, n := range []string{"O'Brien", "D’Artagnan", "Théo", "Jean-Luc (home)"} {
+		if err := UserDisplayName(n); err != nil {
+			t.Errorf("User display name %q rejected: %v", n, err)
+		}
+	}
+	for _, n := range []string{"", "'lead", " lead", "trail ", "<script>", "a\"b", "a\nb", strings.Repeat("x", 65)} {
+		if UserDisplayName(n) == nil {
+			t.Errorf("User display name %q accepted", n)
+		}
+	}
+	for _, g := range []string{"family", "f2", "team_a-b", "1st", strings.Repeat("a", 32)} {
+		if err := GroupName(g); err != nil {
+			t.Errorf("group %q rejected: %v", g, err)
+		}
+	}
+	for _, g := range []string{"", "a", "Family", "a b", "a.b", "-x", "_x", "été", "a\n", strings.Repeat("a", 33), "admins", "proxy-admins"} {
+		if GroupName(g) == nil {
+			t.Errorf("group %q accepted", g)
+		}
+	}
+	for _, u := range []string{"dave", "jo", "j.doe", "a_b-c", "1st", strings.Repeat("a", 32)} {
+		if err := Username(u); err != nil {
+			t.Errorf("username %q rejected: %v", u, err)
+		}
+	}
+	for _, u := range []string{"", "a", "Dave", "a b", ".x", "-x", "_x", "été", "a\n", "a:b", "a@b", strings.Repeat("a", 33)} {
+		if Username(u) == nil {
+			t.Errorf("username %q accepted", u)
+		}
+	}
+}
+
+func TestEmail(t *testing.T) {
+	for _, e := range []string{"dave@example.com", "j.doe+home@mail.example.org", "A_B-c@Example.COM"} {
+		if err := Email(e); err != nil {
+			t.Errorf("e-mail %q rejected: %v", e, err)
+		}
+	}
+	for _, e := range []string{"", "dave", "@example.com", "dave@", "dave@localhost", "a b@x.com", "a..b@x.com", ".a@x.com",
+		"a.@x.com", "a@b@x.com", `"a"@x.com`, "a'b@x.com", "a{b}@x.com", "a@x.com\n", "Dave <dave@x.com>", "a@1.2.3.4",
+		strings.Repeat("a", 65) + "@x.com", "a@" + strings.Repeat("b", 250) + ".com"} {
+		if Email(e) == nil {
+			t.Errorf("e-mail %q accepted", e)
 		}
 	}
 }
@@ -165,6 +211,77 @@ func FuzzFolderName(f *testing.F) {
 			if strings.Contains(s, "/") || strings.Contains(s, "..") {
 				t.Fatalf("unsafe folder accepted: %q", s)
 			}
+		}
+	})
+}
+
+func FuzzGroupName(f *testing.F) {
+	f.Add("family")
+	f.Add("admins")
+	f.Fuzz(func(t *testing.T, s string) {
+		if GroupName(s) == nil {
+			assertInert(t, s)
+			if s == "admins" || s == "proxy-admins" {
+				t.Fatalf("built-in Group accepted: %q", s)
+			}
+		}
+	})
+}
+
+func FuzzUsername(f *testing.F) {
+	f.Add("dave")
+	f.Add("j.doe")
+	f.Add("a\nb")
+	f.Fuzz(func(t *testing.T, s string) {
+		if Username(s) == nil {
+			assertInert(t, s)
+			if s != strings.ToLower(s) {
+				t.Fatalf("uppercase Username accepted: %q", s)
+			}
+		}
+	})
+}
+
+func FuzzUserDisplayName(f *testing.F) {
+	f.Add("O'Brien")
+	f.Add("D’Artagnan")
+	f.Add("a\"b")
+	f.Fuzz(func(t *testing.T, s string) {
+		if UserDisplayName(s) == nil {
+			// Apostrophes are the one addition to DisplayName's characters.
+			assertInert(t, strings.NewReplacer(" ", "", "'", "").Replace(s))
+			if s != strings.TrimSpace(s) || strings.IndexFunc(s, unicode.IsControl) >= 0 {
+				t.Fatalf("unsafe User display name accepted: %q", s)
+			}
+		}
+	})
+}
+
+func FuzzDisplayName(f *testing.F) {
+	f.Add("Dave Doe")
+	f.Add("Économie (2)")
+	f.Add("a\"b")
+	f.Fuzz(func(t *testing.T, s string) {
+		if DisplayName(s) == nil {
+			// Spaces are allowed inside, never around.
+			assertInert(t, strings.ReplaceAll(s, " ", ""))
+			if s != strings.TrimSpace(s) || strings.IndexFunc(s, unicode.IsControl) >= 0 {
+				t.Fatalf("unsafe display name accepted: %q", s)
+			}
+		}
+	})
+}
+
+func FuzzEmail(f *testing.F) {
+	f.Add("dave@example.com")
+	f.Add(`"a b"@x.com`)
+	f.Add("Dave <dave@x.com>")
+	f.Fuzz(func(t *testing.T, s string) {
+		if Email(s) == nil {
+			if strings.Count(s, "@") != 1 {
+				t.Fatalf("e-mail with %d '@' accepted: %q", strings.Count(s, "@"), s)
+			}
+			assertInert(t, strings.Replace(s, "@", "", 1))
 		}
 	})
 }

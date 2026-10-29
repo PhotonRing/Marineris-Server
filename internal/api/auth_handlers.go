@@ -297,6 +297,18 @@ func (s *Server) verifyUserTOTP(ctx context.Context, u *store.User, code string)
 }
 
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, rc *reqCtx, u *store.User, method string) error {
+	// Refused after both factors, like the local listener's rule below.
+	if refusal := signInRefused(u); refusal != nil {
+		s.audit(r, rc, "login", u.Username, false, refusal.Code)
+		return refusal
+	}
+	if rc.listener == Local && !u.IsAdministrator() {
+		// The break-glass listener is for Administrators only. Refused
+		// after both factors, so this tells nothing to someone without
+		// the User's credentials.
+		s.audit(r, rc, "login", u.Username, false, "not an Administrator (local listener)")
+		return errNotAllowed
+	}
 	// Drop any session the browser already had (prevents fixation).
 	_ = s.Sessions.Destroy(r.Context(), w, r)
 	se, err := s.Sessions.Create(r.Context(), w, r, u.ID, method)
@@ -350,7 +362,7 @@ func (s *Server) handlePasskeyLoginFinish(w http.ResponseWriter, r *http.Request
 	}
 	s.Throttle.Succeed(ip)
 	// Already logged in as the same user: this is a step-up confirmation.
-	if se, cur, err := s.Sessions.Load(r.Context(), r); err == nil && cur.ID == u.ID {
+	if se, cur, err := s.Sessions.Load(r.Context(), r); err == nil && cur.ID == u.ID && signInRefused(cur) == nil {
 		if err := s.Sessions.MarkAuth(r.Context(), se); err != nil {
 			return err
 		}
@@ -362,8 +374,18 @@ func (s *Server) handlePasskeyLoginFinish(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
+	owner, err := s.Store.OwnerID(r.Context())
+	if err != nil {
+		return err
+	}
 	return ok(w, map[string]any{
-		"user":       rc.user,
+		"user": rc.user,
+		// What the UI may offer; the API checks again on every request.
+		"rights": map[string]bool{
+			"administrator": rc.user.IsAdministrator(),
+			"proxy_admin":   rc.user.IsProxyAdmin(),
+			"owner":         owner == rc.user.ID,
+		},
 		"csrf_token": rc.session.CSRFToken,
 		"method":     rc.session.Method,
 		"auth_at":    rc.session.AuthAt,

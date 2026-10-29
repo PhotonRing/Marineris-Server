@@ -4,36 +4,75 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 )
 
-// User is an administrator of Marineris.
+// User is a person who can sign in. What they may do depends only on their
+// Groups (see IsAdministrator, IsProxyAdmin) and on whether they are the
+// Owner (OwnerID).
 type User struct {
-	ID           int64  `json:"id"`
-	Username     string `json:"username"`
-	PasswordHash string `json:"-"`
-	TOTPSecret   string `json:"-"` // sealed
-	TOTPLastStep int64  `json:"-"`
+	ID          int64  `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+	Disabled    bool   `json:"disabled"`
+	// ResetPending: a Reset link blocks the User until it is used or
+	// revoked. Read-only: set through CreateReset.
+	ResetPending bool `json:"reset_pending"`
+	// Groups are the names of the user's groups, sorted. Read-only: set
+	// through AddGroupMember.
+	Groups       []string `json:"groups"`
+	PasswordHash string   `json:"-"`
+	TOTPSecret   string   `json:"-"` // sealed
+	TOTPLastStep int64    `json:"-"`
 	// AutheliaTOTP is the fingerprint of the TOTP secret last registered in
 	// Authelia (empty: none yet).
 	AutheliaTOTP  string    `json:"-"`
 	RecoveryCodes []string  `json:"-"` // hashes of unused codes
 	WebAuthnID    []byte    `json:"-"`
-	Role          string    `json:"role"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-const userCols = `id, username, password_hash, totp_secret, totp_last_step, authelia_totp, recovery_codes, webauthn_id, role, created_at, updated_at`
+// The built-in groups. Members of GroupAdmins are Administrators; members of
+// both are Proxy & SSO Administrators.
+const (
+	GroupAdmins      = "admins"
+	GroupProxyAdmins = "proxy-admins"
+)
+
+// IsAdministrator reports whether the user is a member of GroupAdmins.
+func (u *User) IsAdministrator() bool { return slices.Contains(u.Groups, GroupAdmins) }
+
+// IsProxyAdmin reports whether the user is a Proxy & SSO Administrator: an
+// Administrator who is also in GroupProxyAdmins.
+func (u *User) IsProxyAdmin() bool {
+	return u.IsAdministrator() && slices.Contains(u.Groups, GroupProxyAdmins)
+}
+
+// userCols reads the user's groups in the same query, one name per line,
+// and whether a Reset link blocks them.
+const userCols = `id, username, display_name, email, disabled, password_hash, totp_secret, totp_last_step, authelia_totp, recovery_codes, webauthn_id, created_at, updated_at,
+	(SELECT COALESCE(group_concat(g.name, char(10)), '') FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = users.id),
+	` + unfinishedReset
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
-	var codes string
-	if err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.TOTPSecret, &u.TOTPLastStep, &u.AutheliaTOTP, &codes, &u.WebAuthnID, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	var codes, groups string
+	if err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Disabled, &u.PasswordHash, &u.TOTPSecret, &u.TOTPLastStep, &u.AutheliaTOTP, &codes, &u.WebAuthnID, &u.CreatedAt, &u.UpdatedAt, &groups, &u.ResetPending); err != nil {
 		return nil, notFound(err)
 	}
 	if err := json.Unmarshal([]byte(codes), &u.RecoveryCodes); err != nil {
 		return nil, err
+	}
+	u.Groups = []string{}
+	if groups != "" {
+		u.Groups = strings.Split(groups, "\n")
+		slices.Sort(u.Groups)
 	}
 	return &u, nil
 }
@@ -45,17 +84,25 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 	return n, err
 }
 
-// CreateUser inserts a user and returns its ID.
+// CreateUser inserts a user, in no group, and sets its ID. The display name
+// defaults to the username.
 func (s *Store) CreateUser(ctx context.Context, u *User) error {
+	return s.tx(ctx, func(tx *sql.Tx) error { return s.insertUser(ctx, tx, u) })
+}
+
+func (s *Store) insertUser(ctx context.Context, tx *sql.Tx, u *User) error {
 	codes, err := json.Marshal(nonNil(u.RecoveryCodes))
 	if err != nil {
 		return err
 	}
+	if u.DisplayName == "" {
+		u.DisplayName = u.Username
+	}
 	now := s.now()
-	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO users(username, password_hash, totp_secret, totp_last_step, recovery_codes, webauthn_id, role, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		u.Username, u.PasswordHash, u.TOTPSecret, u.TOTPLastStep, string(codes), u.WebAuthnID, u.Role, now, now)
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO users(username, display_name, email, disabled, password_hash, totp_secret, totp_last_step, recovery_codes, webauthn_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		u.Username, u.DisplayName, u.Email, u.Disabled, u.PasswordHash, u.TOTPSecret, u.TOTPLastStep, string(codes), u.WebAuthnID, now, now)
 	if isUnique(err) {
 		return ErrConflict
 	}
@@ -64,7 +111,99 @@ func (s *Store) CreateUser(ctx context.Context, u *User) error {
 	}
 	u.ID, err = res.LastInsertId()
 	u.CreatedAt, u.UpdatedAt = now, now
+	u.Groups = []string{}
 	return err
+}
+
+// CreateOwner creates the first user, as a member of GroupAdmins and as the
+// Owner. It fails with ErrConflict when any user already exists.
+func (s *Store) CreateOwner(ctx context.Context, u *User) error {
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n); err != nil {
+			return err
+		}
+		if n != 0 {
+			return ErrConflict
+		}
+		if err := s.insertUser(ctx, tx, u); err != nil {
+			return err
+		}
+		if err := addMember(ctx, tx, u.ID, GroupAdmins); err != nil {
+			return err
+		}
+		u.Groups = []string{GroupAdmins}
+		_, err := tx.ExecContext(ctx, `INSERT INTO settings(key, value) VALUES (?, ?)`, ownerKey, strconv.FormatInt(u.ID, 10))
+		if isUnique(err) {
+			return ErrConflict
+		}
+		return err
+	})
+}
+
+// ownerKey is the settings row holding the Owner's user ID. It is kept out
+// of Settings so that saving the settings can never change it.
+const ownerKey = "owner_user_id"
+
+// OwnerID returns the Owner's user ID, or 0 before first-run setup.
+func (s *Store) OwnerID(ctx context.Context) (int64, error) {
+	return ownerIn(ctx, s.db)
+}
+
+// ErrDisabled: the user is disabled.
+var ErrDisabled = errors.New("store: user disabled")
+
+// TransferOwnership makes to the Owner in place of from, who stays an
+// Administrator. The new Owner must be an enabled member of GroupAdmins
+// (ErrNotAdministrator; ErrDisabled also when a Reset link blocks them);
+// ErrConflict when from is no longer the Owner (a concurrent handover won).
+func (s *Store) TransferOwnership(ctx context.Context, from, to int64) error {
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		var disabled bool
+		if err := tx.QueryRowContext(ctx, `SELECT disabled OR `+unfinishedReset+` FROM users WHERE id = ?`, to).Scan(&disabled); err != nil {
+			return notFound(err)
+		}
+		in, err := isMember(ctx, tx, to, GroupAdmins)
+		switch {
+		case err != nil:
+			return err
+		case !in:
+			return ErrNotAdministrator
+		case disabled:
+			return ErrDisabled
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE settings SET value = ? WHERE key = ? AND value = ?`,
+			strconv.FormatInt(to, 10), ownerKey, strconv.FormatInt(from, 10))
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return ErrConflict
+		}
+		return nil
+	})
+}
+
+func ownerIn(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}) (int64, error) {
+	var v string
+	err := q.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, ownerKey).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(v, 10, 64)
+}
+
+// DeleteUser removes a user with their sessions, passkeys and memberships.
+// It does not check who the user is: callers refuse deleting the Owner.
+func (s *Store) DeleteUser(ctx context.Context, id int64) error {
+	return s.execOne(ctx, `DELETE FROM users WHERE id = ?`, id)
 }
 
 // GetUser returns the user with the given ID.
@@ -98,6 +237,33 @@ func (s *Store) ListUsers(ctx context.Context) ([]*User, error) {
 		out = append(out, u)
 	}
 	return out, rows.Err()
+}
+
+// UpdateUserProfile replaces a user's display name and e-mail. Nothing
+// changes a username: sessions, passkeys and app accounts are keyed by it.
+func (s *Store) UpdateUserProfile(ctx context.Context, id int64, displayName, email string) error {
+	return s.execOne(ctx, `UPDATE users SET display_name = ?, email = ?, updated_at = ? WHERE id = ?`, displayName, email, s.now(), id)
+}
+
+// SetUserDisabled disables or enables a user. Disabling also ends all of the
+// user's sessions, in the same transaction.
+func (s *Store) SetUserDisabled(ctx context.Context, id int64, disabled bool) error {
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE users SET disabled = ?, updated_at = ? WHERE id = ?`, disabled, s.now(), id)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return ErrNotFound
+		}
+		if !disabled {
+			return nil
+		}
+		_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, id)
+		return err
+	})
 }
 
 // SetPasswordHash replaces a user's password hash.

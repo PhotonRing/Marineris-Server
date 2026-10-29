@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Welcome</title>
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="page.css" />
+    <script type="module" src="link.js"></script>
+  </head>
+  <body>
+    <main class="card">
+      <!-- The brand's logo, as the Authelia portal shows it. -->
+      <img class="logo" src="/static/media/logo.png" alt="" />
+      <h1 id="title">Welcome</h1>
+      <p id="what" class="muted">Loading…</p>
+      <form id="form" class="form" hidden>
+        <label>
+          <span>Username</span>
+          <input id="username" type="text" autocomplete="username" readonly />
+        </label>
+        <label>
+          <span>Choose a password</span>
+          <input id="password" type="password" autocomplete="new-password" required minlength="12" />
+        </label>
+        <label>
+          <span>Type it again</span>
+          <input id="password2" type="password" autocomplete="new-password" required />
+        </label>
+        <!-- Shown when a passkey may be the second factor instead. -->
+        <fieldset id="choice" hidden>
+          <legend>Second factor</legend>
+          <label class="choice">
+            <input type="radio" name="factor" value="totp" checked />
+            <span>Authenticator app</span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="factor" value="passkey" />
+            <span>Passkey</span>
+          </label>
+        </fieldset>
+        <fieldset id="passkey" hidden>
+          <legend>Passkey</legend>
+          <p class="small muted">Your browser or password manager creates it when you continue. It signs you in to every app and to Marineris.</p>
+          <label>
+            <span>Name (optional)</span>
+            <input id="passkey-name" type="text" maxlength="64" placeholder="Passkey" />
+          </label>
+        </fieldset>
+        <fieldset id="totp">
+          <legend>Authenticator app</legend>
+          <p class="small muted">Scan this code with your authenticator app, then type the 6-digit code it shows.</p>
+          <img id="qr" class="qr" alt="Authenticator QR code" />
+          <p class="small muted">Or enter this key: <code id="secret"></code></p>
+          <label>
+            <span>Code</span>
+            <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required />
+          </label>
+        </fieldset>
+        <div class="row">
+          <button id="submit" class="primary" type="submit">Join</button>
+        </div>
+      </form>
+      <p id="status" class="status" role="status" hidden></p>
+    </main>
+  </body>
+</html>

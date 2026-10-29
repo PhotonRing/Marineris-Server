@@ -286,17 +286,25 @@ func (m *Manager) AutheliaInput(ctx context.Context) (authelia.Input, error) {
 			in.Protected = append(in.Protected, authelia.Resource{Host: r.Host, PathPrefix: r.PathPrefix, AdminOnly: r.Auth == store.AuthAdmins})
 		}
 	}
-	// Only administrators have any business on the Marineris UI.
+	// Every User opens the UI (their Hub and Account); the API decides what
+	// each may do there (routes.go).
 	if st.UIHost != "" && st.UIProtectWithAuthelia {
-		in.Protected = append(in.Protected, authelia.Resource{Host: st.UIHost, AdminOnly: true})
+		in.Protected = append(in.Protected, authelia.Resource{Host: st.UIHost})
 	}
 	users, err := m.store.ListUsers(ctx)
 	if err != nil {
 		return in, err
 	}
 	for _, u := range users {
+		email := u.Email
+		if email == "" {
+			// Users without an e-mail of their own get the server's.
+			email = st.ACMEEmail
+		}
 		in.Users = append(in.Users, authelia.User{
-			Username: u.Username, Email: st.ACMEEmail, PasswordHash: u.PasswordHash, Groups: []string{authelia.AdminsGroup},
+			Username: u.Username, DisplayName: u.DisplayName, Email: email, PasswordHash: u.PasswordHash,
+			// A Reset link blocks the User until it is used or revoked.
+			Groups: u.Groups, Disabled: u.Disabled || u.ResetPending,
 		})
 	}
 	return in, nil

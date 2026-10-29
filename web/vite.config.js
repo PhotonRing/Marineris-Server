@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import fs from 'node:fs';
 import path from 'node:path';
+import { newestVersion } from './scripts/changelog-version.js';
 
 // The production build is embedded into the Go binary (internal/webui).
 // VITE_DEMO=1 builds the static demo instead (dist-demo, for GitHub Pages):
@@ -31,9 +32,14 @@ function demoBranding() {
   };
 }
 
+// The demo shows the newest released version (CHANGELOG.md, as the release
+// workflow reads it); without one, the demo build fails.
+const demoVersion = demo ? newestVersion(fs.readFileSync(path.resolve(import.meta.dirname, '../CHANGELOG.md'), 'utf8')) : '';
+
 export default defineConfig({
   base,
   plugins: [svelte(), demo && demoBranding()],
+  define: { __MARINERIS_DEMO_VERSION__: JSON.stringify(demoVersion) },
   build: {
     outDir: demo ? 'dist-demo' : '../internal/webui/dist',
     emptyOutDir: true,

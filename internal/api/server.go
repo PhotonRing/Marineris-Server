@@ -131,6 +131,13 @@ type Server struct {
 	ticketMu  sync.Mutex
 	// tickets of the page adding Authelia passkeys (portal_passkeys.go).
 	tickets map[string]*portalTicket
+	linkMu  sync.Mutex
+	// linkTOTP holds the authenticator being set up through a link, per
+	// link ID (links_page.go).
+	linkTOTP map[int64]*totpPending
+	// linkPasskey holds the passkey ceremony begun through a link, per link
+	// ID (links_passkey.go).
+	linkPasskey map[int64]*linkPasskeyPending
 
 	// bg tracks background applies (see applyAsync).
 	bg sync.WaitGroup
@@ -141,8 +148,10 @@ func (s *Server) Wait() { s.bg.Wait() }
 
 // New creates the API server.
 func New(d Deps) *Server {
-	s := &Server{Deps: d, mfa: map[string]*mfaPending{}, totpEnrol: map[int64]*totpPending{}, tickets: map[string]*portalTicket{}}
+	s := &Server{Deps: d, mfa: map[string]*mfaPending{}, totpEnrol: map[int64]*totpPending{}, tickets: map[string]*portalTicket{},
+		linkTOTP: map[int64]*totpPending{}, linkPasskey: map[int64]*linkPasskeyPending{}}
 	s.routes = s.table()
+	mustValidRoutes(s.routes)
 	return s
 }
 
@@ -160,7 +169,17 @@ func (s *Server) Handler(listener string) http.Handler {
 		mux.Handle(rt.Method+" "+rt.Pattern, s.wrap(listener, rt))
 	}
 	if listener == Edge {
-		mux.Handle(caddy.PortalPasskeyPath+"/", portalPageHandler())
+		mux.Handle(caddy.PortalPasskeyPath+"/", portalPageHandler(caddy.PortalPasskeyPath, map[string]string{
+			"/":           "portalpage/index.html",
+			"/passkey.js": "portalpage/passkey.js",
+			"/page.css":   "portalpage/page.css",
+		}))
+		mux.Handle(caddy.PortalLinkPath+"/", portalPageHandler(caddy.PortalLinkPath, map[string]string{
+			"/":            "portalpage/link.html",
+			"/link.js":     "portalpage/link.js",
+			"/webauthn.js": "portalpage/webauthn.js",
+			"/page.css":    "portalpage/page.css",
+		}))
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, &Error{Status: http.StatusNotFound, Code: "not_found", Message: "no such endpoint"})
@@ -286,8 +305,35 @@ func (s *Server) wrap(listener string, rt Route) http.Handler {
 				s.fail(w, r, err)
 				return
 			}
+			if refusal := signInRefused(u); refusal != nil {
+				// Sessions end when the User is disabled; one that
+				// survived anyway ends now.
+				if err := s.Sessions.Destroy(ctx, w, r); err != nil {
+					s.fail(w, r, err)
+					return
+				}
+				writeError(w, refusal)
+				return
+			}
 			if isUnsafe(r.Method) && !secrets.Equal(r.Header.Get("X-CSRF-Token"), se.CSRFToken) {
 				writeError(w, &Error{Status: http.StatusForbidden, Code: "csrf", Message: "missing or invalid CSRF token"})
+				return
+			}
+			// Checked before step-up: nobody is asked to confirm their
+			// identity for something they may not do anyway.
+			who := rt.Who
+			if listener == Local && who < Administrator {
+				// The break-glass listener is for Administrators only.
+				who = Administrator
+			}
+			if allowed, err := s.allowed(ctx, u, who); err != nil {
+				s.fail(w, r, err)
+				return
+			} else if !allowed {
+				// One entry per refusal, naming the route and the User.
+				rc.user = u
+				s.audit(r, rc, errNotAllowed.Code, rt.Method+" "+rt.Pattern, false, r.URL.Path)
+				writeError(w, errNotAllowed)
 				return
 			}
 			if rt.Access == StepUp && !s.Sessions.RecentlyAuthenticated(se, StepUpWindow) {
@@ -303,6 +349,27 @@ func (s *Server) wrap(listener string, rt Route) http.Handler {
 			s.fail(w, r, err)
 		}
 	})
+}
+
+// errNotAllowed is the answer to a signed-in User lacking the rights a route
+// or a setting needs; the UI recognises it by its code.
+var errNotAllowed = &Error{Status: http.StatusForbidden, Code: "not_allowed", Message: "you are not allowed to do this"}
+
+// allowed reports whether the User may call a route needing who.
+func (s *Server) allowed(ctx context.Context, u *store.User, who Who) (bool, error) {
+	switch who {
+	case Anyone, AnyUser:
+		return true, nil
+	case Administrator:
+		return u.IsAdministrator(), nil
+	case ProxyAdmin, Owner:
+		if who == ProxyAdmin && u.IsProxyAdmin() {
+			return true, nil
+		}
+		owner, err := s.Store.OwnerID(ctx)
+		return err == nil && owner == u.ID, err
+	}
+	return false, nil
 }
 
 // checkOrigin requires unsafe requests to come from the UI's own origin.

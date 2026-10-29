@@ -117,11 +117,14 @@ function routeIcon(r) {
   return db.serviceIcons.get(link) || '';
 }
 
+// Like internal/api/hub.go: admins-only tiles and the widgets only for
+// Administrators.
 function hub() {
+  const admin = !!db.session?.rights?.administrator;
   return {
-    title: db.settings.hub_title, widgets: db.settings.hub_widgets, background: db.settings.hub_background,
+    title: db.settings.hub_title, widgets: admin ? db.settings.hub_widgets : [], background: db.settings.hub_background,
     tiles: db.routes
-      .filter((r) => r.enabled && r.hub.visible)
+      .filter((r) => r.enabled && r.hub.visible && (admin || r.auth !== 'admins'))
       .map((r) => ({ id: r.id, title: r.hub.title || r.name, subtitle: r.hub.subtitle, url: `https://${r.host}${r.path_prefix || ''}/`, auth: r.auth, ...(routeIcon(r) ? { icon: routeIcon(r) } : {}) }))
       .sort((a, b) => a.title.localeCompare(b.title)),
   };
@@ -378,7 +381,6 @@ const routes = [
     return ok(db.settings);
   }],
   ['GET', '/api/audit', () => ok(db.audit.slice(0, 200))],
-  ['GET', '/api/authelia/notification', () => ok({ present: false })],
 
   ['GET', '/api/dns/providers', () => ok(db.providers)],
   ['GET', '/api/dns/profiles', () => ok(db.profiles)],
@@ -649,7 +651,189 @@ const routes = [
     return ok({ ok: true });
   }],
   ['POST', '/api/config/apply', () => { applied('manual apply', ['caddy', 'authelia']); return ok({ ok: true, at: iso() }); }],
+
+  // Users (the demo visitor is the Owner, user 1).
+  ['GET', '/api/users', () => ok(db.users.map(userView))],
+  ['GET', '/api/users/{id}', (p) => withUser(p, (u) => ok(userView(u)))],
+  ['PUT', '/api/users/{id}', (p, b) => withUser(p, (u) => {
+    if ('username' in b) return fail(400, 'bad_request', 'invalid request body: unknown field "username"');
+    const name = (b.display_name || '').trim();
+    if (!/^[\p{L}\p{N}]([\p{L}\p{N} ._()'’-]{0,62}[\p{L}\p{N}._()'’-])?$/u.test(name)) return fail(400, 'invalid', "display_name: must be 1-64 characters: letters, digits, spaces, apostrophes, '.', '_', '(', ')' or '-', starting with a letter or digit", { field: 'display_name' });
+    const email = (b.email || '').trim();
+    if (email && !/^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(email)) return fail(400, 'invalid', 'email: must be an e-mail address like name@example.com', { field: 'email' });
+    Object.assign(u, { display_name: name, email, updated_at: iso() });
+    audit('user.update', u.username);
+    applied(`user ${u.username} updated`, ['authelia']);
+    return ok(userView(u));
+  })],
+  ['PUT', '/api/users/{id}/groups', (p, b) => withUser(p, (u) => {
+    const want = b.groups || [];
+    if (want.some((g) => g === 'admins' || g === 'proxy-admins')) return fail(403, 'builtin_group', 'admins and proxy-admins are managed by the Owner');
+    if (want.some((g) => !db.groupNames.includes(g))) return fail(400, 'invalid', 'groups: no such Group', { field: 'groups' });
+    u.groups = [...u.groups.filter((g) => g === 'admins' || g === 'proxy-admins'), ...want].sort();
+    audit('user.groups', u.username, want.join(','));
+    applied(`groups of ${u.username} changed`, ['authelia']);
+    return ok(userView(u));
+  })],
+  ['POST', '/api/users/{id}/disable', (p) => setUserDisabled(p, true)],
+  ['POST', '/api/users/{id}/enable', (p) => setUserDisabled(p, false)],
+  ['DELETE', '/api/users/{id}', (p) => withUser(p, (u) => {
+    if (u.id === 1) return fail(409, 'self', 'you cannot do this to your own User');
+    db.users = db.users.filter((x) => x !== u);
+    audit('user.delete', u.username);
+    applied(`user ${u.username} deleted`, ['authelia']);
+    return ok({ ok: true });
+  })],
+
+  // Invites (pending ones in db.links; nobody can accept them in the demo).
+  ['POST', '/api/invites', (p, b) => {
+    const username = (b.username || '').trim();
+    if (!/^[a-z0-9][a-z0-9._-]{1,31}$/.test(username)) return fail(400, 'invalid', "username: must be 2-32 characters: lowercase letters, digits, '.', '_' or '-', starting with a letter or digit", { field: 'username' });
+    const links = (db.links ||= []);
+    if (db.users.some((u) => u.username.toLowerCase() === username)) return fail(400, 'invalid', 'username: is already taken', { field: 'username' });
+    if (links.some((l) => l.username === username)) return fail(400, 'invalid', 'username: is reserved by a pending Invite', { field: 'username' });
+    const groups = (b.groups || []).map((g) => g.trim().toLowerCase());
+    if (groups.some((g) => BUILTIN_GROUPS.includes(g))) return fail(403, 'builtin_group', 'admins and proxy-admins are managed by the Owner');
+    if (groups.some((g) => !db.groupNames.includes(g))) return fail(400, 'invalid', 'groups: no such Group', { field: 'groups' });
+    const link = {
+      id: (links.reduce((m, l) => Math.max(m, l.id), 0) || 0) + 1, kind: 'invite', username,
+      display_name: (b.display_name || '').trim() || username, email: (b.email || '').trim(), groups: groups.sort(),
+      created_by: 'admin', created_at: iso(), expires_at: new Date(Date.now() + 72 * 3600 * 1000).toISOString(),
+    };
+    links.push(link);
+    audit('invite.create', username, groups.join(','));
+    return ok({ ...link, url: `https://auth.example.com/marineris-link/#demo-${link.id}-not-a-real-link` });
+  }],
+  ['GET', '/api/links', () => ok(db.links || [])],
+  ['DELETE', '/api/links/{id}', (p) => {
+    const l = (db.links || []).find((x) => x.id === +p.id);
+    if (!l) return notFound();
+    db.links = db.links.filter((x) => x !== l);
+    audit(`${l.kind}.revoke`, l.username);
+    return ok({ ok: true });
+  }],
+
+  // Groups (custom ones in db.groupNames; memberships live on the users).
+  ['GET', '/api/groups', () => ok(groupList())],
+  ['POST', '/api/groups', (p, b) => {
+    const bad = groupNameError(b.name);
+    if (bad) return bad;
+    db.groupNames = [...db.groupNames, b.name].sort();
+    audit('group.create', b.name);
+    return { ...ok(groupList().find((g) => g.name === b.name)), status: 201 };
+  }],
+  ['PUT', '/api/groups/{name}', (p, b) => withGroup(p, () => {
+    const bad = groupNameError(b.name);
+    if (bad) return bad;
+    db.groupNames = db.groupNames.map((g) => (g === p.name ? b.name : g)).sort();
+    for (const u of db.users) u.groups = u.groups.map((g) => (g === p.name ? b.name : g)).sort();
+    audit('group.rename', b.name, `from ${p.name}`);
+    applied(`group ${p.name} renamed to ${b.name}`, ['authelia']);
+    return ok(groupList().find((g) => g.name === b.name));
+  })],
+  ['DELETE', '/api/groups/{name}', (p) => withGroup(p, () => {
+    db.groupNames = db.groupNames.filter((g) => g !== p.name);
+    for (const u of db.users) u.groups = u.groups.filter((g) => g !== p.name);
+    audit('group.delete', p.name);
+    applied(`group ${p.name} deleted`, ['authelia']);
+    return ok({ ok: true });
+  })],
+  // Owner powers (listed before the custom Group routes: first match wins).
+  ['PUT', '/api/groups/admins/members/{id}', (p) => builtinMember('admins', p, true)],
+  ['DELETE', '/api/groups/admins/members/{id}', (p) => builtinMember('admins', p, false)],
+  ['PUT', '/api/groups/proxy-admins/members/{id}', (p) => builtinMember('proxy-admins', p, true)],
+  ['DELETE', '/api/groups/proxy-admins/members/{id}', (p) => builtinMember('proxy-admins', p, false)],
+  ['POST', '/api/owner', (p, b) => {
+    if (!db.session?.rights?.owner) return fail(403, 'not_allowed', 'you are not allowed to do this');
+    const u = db.users.find((x) => x.id === +b.user_id);
+    if (!u) return notFound();
+    if (u.id === ownerID()) return fail(409, 'self', 'you cannot do this to your own User');
+    if (!u.groups.includes('admins')) return fail(409, 'not_administrator', 'only Administrators can be Proxy & SSO Administrators or the Owner');
+    if (u.disabled) return fail(409, 'target_disabled', 'a Disabled User cannot become the Owner');
+    db.ownerID = u.id;
+    db.session.rights.owner = false;
+    audit('owner.transfer', u.username, 'from admin');
+    return ok({ ok: true });
+  }],
+  ['PUT', '/api/groups/{name}/members/{id}', (p) => groupMember(p, true)],
+  ['DELETE', '/api/groups/{name}/members/{id}', (p) => groupMember(p, false)],
 ];
+
+const BUILTIN_GROUPS = ['admins', 'proxy-admins'];
+
+function groupList() {
+  const member = (name) => db.users
+    .filter((u) => u.groups.includes(name))
+    .map((u) => ({ id: u.id, username: u.username, display_name: u.display_name }))
+    .sort((a, b) => a.username.localeCompare(b.username));
+  return [
+    ...BUILTIN_GROUPS.map((name) => ({ name, builtin: true, members: member(name) })),
+    ...db.groupNames.map((name) => ({ name, builtin: false, members: member(name) })),
+  ];
+}
+
+function groupNameError(name) {
+  if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(name || '')) return fail(400, 'invalid', "name: must be 2-32 characters: lowercase letters, digits, '_' or '-', starting with a letter or digit", { field: 'name' });
+  if (BUILTIN_GROUPS.includes(name)) return fail(400, 'invalid', 'name: is reserved for a built-in Group', { field: 'name' });
+  if (db.groupNames.includes(name)) return fail(409, 'conflict', 'an item with the same name already exists');
+  return null;
+}
+
+function withGroup(p, fn) {
+  if (BUILTIN_GROUPS.includes(p.name)) return fail(403, 'builtin_group', 'admins and proxy-admins are managed by the Owner');
+  return db.groupNames.includes(p.name) ? fn() : notFound();
+}
+
+function groupMember(p, add) {
+  const action = add ? 'group.member_add' : 'group.member_remove';
+  return withGroup(p, () => withUser(p, (u) => {
+    u.groups = add ? [...new Set([...u.groups, p.name])].sort() : u.groups.filter((g) => g !== p.name);
+    audit(action, p.name, u.username);
+    applied(`${action} ${p.name} ${u.username}`, ['authelia']);
+    return ok(groupList().find((g) => g.name === p.name));
+  }));
+}
+
+// Same rules as internal/store (AddBuiltinMember, RemoveBuiltinMember).
+function builtinMember(group, p, add) {
+  if (!db.session?.rights?.owner) return fail(403, 'not_allowed', 'you are not allowed to do this');
+  const action = add ? 'group.member_add' : 'group.member_remove';
+  return withUser(p, (u) => {
+    if (add && group === 'proxy-admins' && !u.groups.includes('admins')) return fail(409, 'not_administrator', 'only Administrators can be Proxy & SSO Administrators or the Owner');
+    if (!add && group === 'admins' && u.groups.includes('admins')) {
+      if (db.users.filter((x) => x.groups.includes('admins')).length === 1) return fail(409, 'last_administrator', 'admins cannot lose its last member');
+      if (u.id === ownerID()) return fail(409, 'owner_administrator', 'the Owner stays an Administrator; hand ownership over first');
+    }
+    const drop = group === 'admins' ? ['admins', 'proxy-admins'] : [group];
+    u.groups = add ? [...new Set([...u.groups, group])].sort() : u.groups.filter((g) => !drop.includes(g));
+    audit(action, group, u.username);
+    applied(`${action} ${group} ${u.username}`, ['authelia']);
+    return ok(groupList().find((g) => g.name === group));
+  });
+}
+
+function ownerID() {
+  return db.ownerID ?? 1;
+}
+
+function userView(u) {
+  return { ...u, state: u.disabled ? 'disabled' : 'active', owner: u.id === ownerID() };
+}
+
+function withUser(p, fn) {
+  const u = db.users.find((x) => x.id === +p.id);
+  return u ? fn(u) : notFound();
+}
+
+function setUserDisabled(p, disabled) {
+  return withUser(p, (u) => {
+    if (u.id === 1) return fail(409, 'self', 'you cannot do this to your own User');
+    u.disabled = disabled;
+    audit(disabled ? 'user.disable' : 'user.enable', u.username);
+    applied(`${disabled ? 'user.disable' : 'user.enable'} ${u.username}`, ['authelia']);
+    return ok(userView(u));
+  });
+}
 
 const compiled = routes.map(([method, pattern, fn]) => {
   const names = [];

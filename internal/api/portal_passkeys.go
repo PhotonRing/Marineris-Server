@@ -38,6 +38,12 @@ type AutheliaPasskeyStore interface {
 	AutheliaUserHandle(ctx context.Context, rpid, username string) (string, error)
 	AddAutheliaPasskey(ctx context.Context, p configmgr.NewAutheliaPasskey) error
 	DeleteAutheliaPasskey(ctx context.Context, username string, id int64) error
+	// DeleteAutheliaUser removes everything Authelia keeps for a deleted
+	// User (passkeys, authenticator).
+	DeleteAutheliaUser(ctx context.Context, username string) error
+	// DeleteAutheliaSecondFactors removes a User's authenticator and
+	// passkeys from Authelia (a second-factor Reset link).
+	DeleteAutheliaSecondFactors(ctx context.Context, username string) error
 }
 
 const portalTicketTTL = 5 * time.Minute
@@ -59,16 +65,13 @@ type portalTicket struct {
 //go:embed portalpage
 var portalPage embed.FS
 
-// portalPageHandler serves the page (edge listener only).
-func portalPageHandler() http.Handler {
-	files := map[string]string{
-		"/":            "portalpage/index.html",
-		"/passkey.js":  "portalpage/passkey.js",
-		"/passkey.css": "portalpage/passkey.css",
-	}
+// portalPageHandler serves a page on the portal's host under prefix (edge
+// listener only): the page adding a passkey, or the Invite and Reset link
+// page (links_page.go).
+func portalPageHandler(prefix string, files map[string]string) http.Handler {
 	types := map[string]string{".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		name, ok := files[strings.TrimPrefix(r.URL.Path, caddy.PortalPasskeyPath)]
+		name, ok := files[strings.TrimPrefix(r.URL.Path, prefix)]
 		if !ok || (r.Method != http.MethodGet && r.Method != http.MethodHead) {
 			http.NotFound(w, r)
 			return
@@ -97,14 +100,23 @@ func (s *Server) portalHosts(ctx context.Context, st store.Settings) (map[string
 	return out, nil
 }
 
-// checkPortalOrigin requires requests of the page to come from a portal host.
+// checkPortalOrigin requires requests of the page to come from a portal
+// host; for the link page, from the portal of the UI's domain only, the one
+// Caddy serves it on.
 func (s *Server) checkPortalOrigin(ctx context.Context, settings store.Settings, r *http.Request) *Error {
 	bad := &Error{Status: http.StatusForbidden, Code: "bad_origin", Message: "cross-origin request refused"}
 	u, err := url.Parse(r.Header.Get("Origin"))
 	if err != nil || u.Scheme != "https" || u.Host == "" {
 		return bad
 	}
-	hosts, err := s.portalHosts(ctx, settings)
+	var hosts map[string]bool
+	if strings.HasPrefix(r.URL.Path, caddy.PortalLinkPath+"/") {
+		var host string
+		host, err = s.linkPortalHost(ctx, settings)
+		hosts = map[string]bool{host: host != ""}
+	} else {
+		hosts, err = s.portalHosts(ctx, settings)
+	}
 	if err != nil || !hosts[u.Host] {
 		return bad
 	}

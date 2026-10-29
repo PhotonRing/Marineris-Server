@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -95,11 +96,11 @@ func TestSettingsDefaultsAndUpdate(t *testing.T) {
 func TestUsersAndTOTPReplay(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
-	u := &User{Username: "Admin", PasswordHash: "h", WebAuthnID: []byte("handle"), Role: "admin"}
+	u := &User{Username: "Admin", PasswordHash: "h", WebAuthnID: []byte("handle")}
 	if err := s.CreateUser(ctx, u); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateUser(ctx, &User{Username: "admin", PasswordHash: "h", WebAuthnID: []byte("x"), Role: "admin"}); !errors.Is(err, ErrConflict) {
+	if err := s.CreateUser(ctx, &User{Username: "admin", PasswordHash: "h", WebAuthnID: []byte("x")}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("usernames must be case-insensitively unique, got %v", err)
 	}
 	got, err := s.GetUserByName(ctx, "ADMIN")
@@ -120,10 +121,126 @@ func TestUsersAndTOTPReplay(t *testing.T) {
 	}
 }
 
+// Two handovers racing from the same Owner: only the first one wins.
+func TestStaleOwnershipHandoverIsRefused(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	alice := &User{Username: "alice", PasswordHash: "h", WebAuthnID: []byte("a")}
+	if err := s.CreateOwner(ctx, alice); err != nil {
+		t.Fatal(err)
+	}
+	var ids []int64
+	for _, n := range []string{"bob", "carol"} {
+		u := &User{Username: n, PasswordHash: "h", WebAuthnID: []byte(n)}
+		if err := s.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.AddGroupMember(ctx, u.ID, GroupAdmins); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, u.ID)
+	}
+	if err := s.TransferOwnership(ctx, alice.ID, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.TransferOwnership(ctx, alice.ID, ids[1]); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale handover: %v", err)
+	}
+	if id, _ := s.OwnerID(ctx); id != ids[0] {
+		t.Fatalf("owner %d, want bob (%d)", id, ids[0])
+	}
+}
+
+func TestFreshDatabaseHasNoOwner(t *testing.T) {
+	s := newStore(t)
+	id, err := s.OwnerID(context.Background())
+	if err != nil || id != 0 {
+		t.Fatalf("owner %d, %v; want none", id, err)
+	}
+}
+
+func TestCreateOwnerMakesTheFirstUserOwnerAndAdministrator(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	u := &User{Username: "alice", PasswordHash: "h", WebAuthnID: []byte("a")}
+	if err := s.CreateOwner(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if id, _ := s.OwnerID(ctx); id != u.ID {
+		t.Fatalf("owner %d, want %d", id, u.ID)
+	}
+	got, err := s.GetUser(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DisplayName != "alice" || got.Email != "" || got.Disabled {
+		t.Fatalf("defaults: %+v", got)
+	}
+	if !got.IsAdministrator() || got.IsProxyAdmin() || len(got.Groups) != 1 || got.Groups[0] != GroupAdmins {
+		t.Fatalf("groups %v", got.Groups)
+	}
+	if err := s.CreateOwner(ctx, &User{Username: "bob", PasswordHash: "h", WebAuthnID: []byte("b")}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("second owner: %v", err)
+	}
+	if _, err := s.GetUserByName(ctx, "bob"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("refused owner was still created")
+	}
+}
+
+func TestGroupMembership(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	u := &User{Username: "carol", DisplayName: "Carol C.", Email: "c@example.com", PasswordHash: "h", WebAuthnID: []byte("c")}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateGroup(ctx, "family"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateGroup(ctx, "Family"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("group names must be unique ignoring case, got %v", err)
+	}
+	for _, g := range []string{"family", GroupAdmins, GroupProxyAdmins} {
+		if err := s.AddGroupMember(ctx, u.ID, g); err != nil {
+			t.Fatalf("join %s: %v", g, err)
+		}
+	}
+	if err := s.AddGroupMember(ctx, u.ID, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown group: %v", err)
+	}
+	got, _ := s.GetUserByName(ctx, "carol")
+	if got.DisplayName != "Carol C." || got.Email != "c@example.com" {
+		t.Fatalf("%+v", got)
+	}
+	if want := []string{GroupAdmins, "family", GroupProxyAdmins}; strings.Join(got.Groups, ",") != strings.Join(want, ",") {
+		t.Fatalf("groups %v, want %v", got.Groups, want)
+	}
+	if !got.IsAdministrator() || !got.IsProxyAdmin() {
+		t.Fatal("rights not derived from groups")
+	}
+	if err := s.DeleteGroup(ctx, "family"); err != nil {
+		t.Fatal(err)
+	}
+	us, _ := s.ListUsers(ctx)
+	if len(us) != 1 || len(us[0].Groups) != 2 {
+		t.Fatalf("deleting a group must drop its memberships: %v", us[0].Groups)
+	}
+	if err := s.DeleteUser(ctx, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateGroup(ctx, "family"); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM group_members`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("memberships left after deleting the user: %d %v", n, err)
+	}
+}
+
 func TestTOTPStepConcurrentSingleUse(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
-	u := &User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h"), Role: "admin"}
+	u := &User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h")}
 	if err := s.CreateUser(ctx, u); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +267,7 @@ func TestTOTPStepConcurrentSingleUse(t *testing.T) {
 func TestRecoveryCodesSingleUse(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
-	u := &User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h"), Role: "admin"}
+	u := &User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h")}
 	_ = s.CreateUser(ctx, u)
 	_ = s.SetRecoveryCodes(ctx, u.ID, []string{"h1", "h2"})
 	match := func(h string) bool { return h == "h1" }
@@ -169,7 +286,7 @@ func TestRecoveryCodesSingleUse(t *testing.T) {
 func TestSessionsLifecycle(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
-	u := &User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h"), Role: "admin"}
+	u := &User{Username: "a", PasswordHash: "h", WebAuthnID: []byte("h")}
 	_ = s.CreateUser(ctx, u)
 	now := time.Now().UTC()
 	for _, id := range []string{"s1", "s2"} {

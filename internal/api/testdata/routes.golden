@@ -1,93 +1,118 @@
-DELETE /api/account/authelia-passkeys/{id}        stepup  both
-DELETE /api/account/passkeys/{id}                 stepup  both
-DELETE /api/branding/{asset}                      stepup  both
-DELETE /api/containers/{id}                       stepup  both
-DELETE /api/dns/profiles/{id}                     stepup  both
-DELETE /api/domains/{id}                          stepup  both
-DELETE /api/routes/{id}                           authed  both
-DELETE /api/routes/{id}/icon                      authed  both
-DELETE /api/stacks/{name}                         stepup  both
-DELETE /api/stacks/{name}/icons/{service}         authed  both
-DELETE /api/volumes/{name}                        stepup  both
-GET    /api/account/authelia-passkeys             authed  both
-GET    /api/account/passkeys                      authed  both
-GET    /api/audit                                 authed  both
-GET    /api/auth/session                          authed  both
-GET    /api/authelia/notification                 authed  both
-GET    /api/branding/{asset}                      public  both
-GET    /api/certificates                          authed  both
-GET    /api/config/components/{component}/current authed  both
-GET    /api/config/components/{component}/history authed  both
-GET    /api/config/summary                        authed  both
-GET    /api/config/versions/{id}                  authed  both
-GET    /api/containers                            authed  both
-GET    /api/containers/{id}                       authed  both
-GET    /api/containers/{id}/logs                  authed  both
-GET    /api/dns/profiles                          authed  both
-GET    /api/dns/providers                         authed  both
-GET    /api/domains                               authed  both
-GET    /api/health                                public  both
-GET    /api/hub                                   authed  both
-GET    /api/hub/icons/{id}                        authed  both
-GET    /api/meta                                  public  both
-GET    /api/networks                              authed  both
-GET    /api/overview                              authed  both
-GET    /api/routes                                authed  both
-GET    /api/settings                              authed  both
-GET    /api/stack-icons                           authed  both
-GET    /api/stacks                                authed  both
-GET    /api/stacks/{name}                         authed  both
-GET    /api/stacks/{name}/icons/{service}         authed  both
-GET    /api/stacks/{name}/services                authed  both
-GET    /api/system/stats                          authed  both
-GET    /api/volumes                               authed  both
-POST   /api/account/authelia-passkeys             stepup  both
-POST   /api/account/passkeys/begin                stepup  both
-POST   /api/account/passkeys/finish               stepup  both
-POST   /api/account/password                      stepup  both
-POST   /api/account/recovery-codes                stepup  both
-POST   /api/account/sessions/revoke-others        authed  both
-POST   /api/account/totp/begin                    stepup  both
-POST   /api/account/totp/finish                   stepup  both
-POST   /api/auth/login                            public  both
-POST   /api/auth/login/mfa                        public  both
-POST   /api/auth/logout                           authed  both
-POST   /api/auth/passkey/begin                    public  both
-POST   /api/auth/passkey/finish                   public  both
-POST   /api/auth/reauth                           authed  both
-POST   /api/config/apply                          authed  both
-POST   /api/config/versions/{id}/rollback         stepup  both
-POST   /api/containers/{id}/restart               authed  both
-POST   /api/containers/{id}/start                 authed  both
-POST   /api/containers/{id}/stop                  authed  both
-POST   /api/dns/profiles                          authed  both
-POST   /api/dns/profiles/{id}/test                authed  both
-POST   /api/domains                               authed  both
-POST   /api/routes                                authed  both
-POST   /api/setup/begin                           setup   local
-POST   /api/setup/finish                          setup   local
-POST   /api/stacks                                authed  both
-POST   /api/stacks/check                          authed  both
-POST   /api/stacks/{name}/deploy                  authed  both
-POST   /api/stacks/{name}/down                    authed  both
-POST   /api/stacks/{name}/pull                    authed  both
-POST   /api/stacks/{name}/rename                  authed  both
-POST   /api/stacks/{name}/restart                 authed  both
-POST   /api/stacks/{name}/services/{service}/recreate authed  both
-POST   /api/stacks/{name}/services/{service}/restart authed  both
-POST   /api/stacks/{name}/services/{service}/start authed  both
-POST   /api/stacks/{name}/services/{service}/stop authed  both
-POST   /api/stacks/{name}/services/{service}/update authed  both
-POST   /api/stacks/{name}/start                   authed  both
-POST   /marineris-passkey/api/begin               ticket  edge
-POST   /marineris-passkey/api/finish              ticket  edge
-PUT    /api/branding                              stepup  both
-PUT    /api/branding/{asset}                      stepup  both
-PUT    /api/dns/profiles/{id}                     stepup  both
-PUT    /api/domains/{id}                          authed  both
-PUT    /api/routes/{id}                           authed  both
-PUT    /api/routes/{id}/icon                      authed  both
-PUT    /api/settings                              stepup  both
-PUT    /api/stacks/{name}                         authed  both
-PUT    /api/stacks/{name}/icons/{service}         authed  both
-PUT    /api/stacks/{name}/services/{service}      authed  both
+DELETE /api/account/authelia-passkeys/{id}        stepup  user   both
+DELETE /api/account/passkeys/{id}                 stepup  user   both
+DELETE /api/branding/{asset}                      stepup  admin  both
+DELETE /api/containers/{id}                       stepup  admin  both
+DELETE /api/dns/profiles/{id}                     stepup  admin  both
+DELETE /api/domains/{id}                          stepup  admin  both
+DELETE /api/groups/admins/members/{id}            stepup  owner  both
+DELETE /api/groups/proxy-admins/members/{id}      stepup  owner  both
+DELETE /api/groups/{name}                         stepup  admin  both
+DELETE /api/groups/{name}/members/{id}            authed  admin  both
+DELETE /api/links/{id}                            authed  admin  both
+DELETE /api/routes/{id}                           authed  admin  both
+DELETE /api/routes/{id}/icon                      authed  admin  both
+DELETE /api/stacks/{name}                         stepup  admin  both
+DELETE /api/stacks/{name}/icons/{service}         authed  admin  both
+DELETE /api/users/{id}                            stepup  admin  both
+DELETE /api/volumes/{name}                        stepup  admin  both
+GET    /api/account/authelia-passkeys             authed  user   both
+GET    /api/account/passkeys                      authed  user   both
+GET    /api/audit                                 authed  admin  both
+GET    /api/auth/session                          authed  user   both
+GET    /api/branding/{asset}                      public  anyone both
+GET    /api/certificates                          authed  admin  both
+GET    /api/config/components/{component}/current authed  admin  both
+GET    /api/config/components/{component}/history authed  admin  both
+GET    /api/config/summary                        authed  admin  both
+GET    /api/config/versions/{id}                  authed  admin  both
+GET    /api/containers                            authed  admin  both
+GET    /api/containers/{id}                       authed  admin  both
+GET    /api/containers/{id}/logs                  authed  admin  both
+GET    /api/dns/profiles                          authed  admin  both
+GET    /api/dns/providers                         authed  admin  both
+GET    /api/domains                               authed  admin  both
+GET    /api/groups                                authed  admin  both
+GET    /api/health                                public  anyone both
+GET    /api/hub                                   authed  user   both
+GET    /api/hub/icons/{id}                        authed  user   both
+GET    /api/links                                 authed  admin  both
+GET    /api/meta                                  public  anyone both
+GET    /api/networks                              authed  admin  both
+GET    /api/overview                              authed  admin  both
+GET    /api/routes                                authed  admin  both
+GET    /api/settings                              authed  admin  both
+GET    /api/stack-icons                           authed  admin  both
+GET    /api/stacks                                authed  admin  both
+GET    /api/stacks/{name}                         authed  admin  both
+GET    /api/stacks/{name}/icons/{service}         authed  admin  both
+GET    /api/stacks/{name}/services                authed  admin  both
+GET    /api/system/stats                          authed  admin  both
+GET    /api/users                                 authed  admin  both
+GET    /api/users/{id}                            authed  admin  both
+GET    /api/volumes                               authed  admin  both
+POST   /api/account/authelia-passkeys             stepup  user   both
+POST   /api/account/passkeys/begin                stepup  user   both
+POST   /api/account/passkeys/finish               stepup  user   both
+POST   /api/account/password                      stepup  user   both
+POST   /api/account/recovery-codes                stepup  user   both
+POST   /api/account/sessions/revoke-others        authed  user   both
+POST   /api/account/totp/begin                    stepup  user   both
+POST   /api/account/totp/finish                   stepup  user   both
+POST   /api/auth/login                            public  anyone both
+POST   /api/auth/login/mfa                        public  anyone both
+POST   /api/auth/logout                           authed  user   both
+POST   /api/auth/passkey/begin                    public  anyone both
+POST   /api/auth/passkey/finish                   public  anyone both
+POST   /api/auth/reauth                           authed  user   both
+POST   /api/config/apply                          authed  admin  both
+POST   /api/config/versions/{id}/rollback         stepup  proxy  both
+POST   /api/containers/{id}/restart               authed  admin  both
+POST   /api/containers/{id}/start                 authed  admin  both
+POST   /api/containers/{id}/stop                  authed  admin  both
+POST   /api/dns/profiles                          authed  admin  both
+POST   /api/dns/profiles/{id}/test                authed  admin  both
+POST   /api/domains                               authed  admin  both
+POST   /api/groups                                authed  admin  both
+POST   /api/invites                               stepup  admin  both
+POST   /api/owner                                 stepup  owner  both
+POST   /api/routes                                authed  admin  both
+POST   /api/setup/begin                           setup   anyone local
+POST   /api/setup/finish                          setup   anyone local
+POST   /api/stacks                                authed  admin  both
+POST   /api/stacks/check                          authed  admin  both
+POST   /api/stacks/{name}/deploy                  authed  admin  both
+POST   /api/stacks/{name}/down                    authed  admin  both
+POST   /api/stacks/{name}/pull                    authed  admin  both
+POST   /api/stacks/{name}/rename                  authed  admin  both
+POST   /api/stacks/{name}/restart                 authed  admin  both
+POST   /api/stacks/{name}/services/{service}/recreate authed  admin  both
+POST   /api/stacks/{name}/services/{service}/restart authed  admin  both
+POST   /api/stacks/{name}/services/{service}/start authed  admin  both
+POST   /api/stacks/{name}/services/{service}/stop authed  admin  both
+POST   /api/stacks/{name}/services/{service}/update authed  admin  both
+POST   /api/stacks/{name}/start                   authed  admin  both
+POST   /api/users/{id}/disable                    authed  admin  both
+POST   /api/users/{id}/enable                     authed  admin  both
+POST   /api/users/{id}/reset                      stepup  admin  both
+POST   /marineris-link/api/finish                 ticket  anyone edge
+POST   /marineris-link/api/passkey                ticket  anyone edge
+POST   /marineris-link/api/read                   ticket  anyone edge
+POST   /marineris-link/api/totp                   ticket  anyone edge
+POST   /marineris-passkey/api/begin               ticket  anyone edge
+POST   /marineris-passkey/api/finish              ticket  anyone edge
+PUT    /api/branding                              stepup  admin  both
+PUT    /api/branding/{asset}                      stepup  admin  both
+PUT    /api/dns/profiles/{id}                     stepup  admin  both
+PUT    /api/domains/{id}                          authed  admin  both
+PUT    /api/groups/admins/members/{id}            stepup  owner  both
+PUT    /api/groups/proxy-admins/members/{id}      stepup  owner  both
+PUT    /api/groups/{name}                         authed  admin  both
+PUT    /api/groups/{name}/members/{id}            authed  admin  both
+PUT    /api/routes/{id}                           authed  admin  both
+PUT    /api/routes/{id}/icon                      authed  admin  both
+PUT    /api/settings                              stepup  admin  both
+PUT    /api/stacks/{name}                         authed  admin  both
+PUT    /api/stacks/{name}/icons/{service}         authed  admin  both
+PUT    /api/stacks/{name}/services/{service}      authed  admin  both
+PUT    /api/users/{id}                            authed  admin  both
+PUT    /api/users/{id}/groups                     authed  admin  both

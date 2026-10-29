@@ -73,6 +73,44 @@ func TestRenderSecureDefaults(t *testing.T) {
 	}
 }
 
+// Authelia re-reads a User on every request, so disabling them or changing
+// their Groups takes effect on their next request, open session included.
+func TestRenderRefreshesUsersOnEveryRequest(t *testing.T) {
+	in := input()
+	in.Users = append(in.Users, User{Username: "carol", DisplayName: "Carol", Email: "c@example.com",
+		PasswordHash: in.Users[0].PasswordHash, Groups: []string{"family"}, Disabled: true})
+	cfg, users, err := Render(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Backend struct {
+			RefreshInterval string `yaml:"refresh_interval"`
+		} `yaml:"authentication_backend"`
+	}
+	if err := yaml.Unmarshal(cfg, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Backend.RefreshInterval != "always" {
+		t.Fatalf("refresh_interval = %q", doc.Backend.RefreshInterval)
+	}
+	var u struct {
+		Users map[string]struct {
+			Disabled bool     `yaml:"disabled"`
+			Groups   []string `yaml:"groups"`
+		} `yaml:"users"`
+	}
+	if err := yaml.Unmarshal(users, &u); err != nil {
+		t.Fatal(err)
+	}
+	if c := u.Users["carol"]; !c.Disabled || len(c.Groups) != 1 || c.Groups[0] != "family" {
+		t.Fatalf("carol: %+v", c)
+	}
+	if u.Users["admin"].Disabled {
+		t.Fatal("admin rendered disabled")
+	}
+}
+
 func TestRenderPlaceholderBeforeSetup(t *testing.T) {
 	in := input()
 	in.Domains, in.Protected, in.Users = nil, nil, nil
