@@ -123,6 +123,90 @@ func removeMember(ctx context.Context, tx *sql.Tx, userID int64, group string) e
 	return err
 }
 
+// The rules of the built-in groups, kept here so that no caller can break
+// them: proxy-admins holds only members of admins, admins is never empty and
+// always holds the Owner.
+var (
+	// ErrNotAdministrator: the user is not in GroupAdmins.
+	ErrNotAdministrator = errors.New("store: not an administrator")
+	// ErrLastAdministrator: the change would leave GroupAdmins empty.
+	ErrLastAdministrator = errors.New("store: last administrator")
+	// ErrOwnerAdministrator: the Owner always stays in GroupAdmins.
+	ErrOwnerAdministrator = errors.New("store: the owner stays an administrator")
+)
+
+// AddBuiltinMember puts a user in GroupAdmins or GroupProxyAdmins (no-op
+// when already a member). Only members of GroupAdmins join GroupProxyAdmins
+// (ErrNotAdministrator).
+func (s *Store) AddBuiltinMember(ctx context.Context, userID int64, group string) error {
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		if err := userExists(ctx, tx, userID); err != nil {
+			return err
+		}
+		if group == GroupProxyAdmins {
+			in, err := isMember(ctx, tx, userID, GroupAdmins)
+			if err != nil {
+				return err
+			}
+			if !in {
+				return ErrNotAdministrator
+			}
+		}
+		return addMember(ctx, tx, userID, group)
+	})
+}
+
+// RemoveBuiltinMember takes a user out of GroupAdmins or GroupProxyAdmins
+// (no-op when not a member). Leaving GroupAdmins also leaves
+// GroupProxyAdmins, in the same transaction. The last member of GroupAdmins
+// stays (ErrLastAdministrator), and so does the Owner
+// (ErrOwnerAdministrator).
+func (s *Store) RemoveBuiltinMember(ctx context.Context, userID int64, group string) error {
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		if err := userExists(ctx, tx, userID); err != nil {
+			return err
+		}
+		if group != GroupAdmins {
+			return removeMember(ctx, tx, userID, group)
+		}
+		in, err := isMember(ctx, tx, userID, GroupAdmins)
+		if err != nil || !in {
+			return err
+		}
+		var others int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM group_members m JOIN groups g ON g.id = m.group_id
+			WHERE g.name = ? AND m.user_id <> ?`, GroupAdmins, userID).Scan(&others); err != nil {
+			return err
+		}
+		if others == 0 {
+			return ErrLastAdministrator
+		}
+		owner, err := ownerIn(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if owner == userID {
+			return ErrOwnerAdministrator
+		}
+		if err := removeMember(ctx, tx, userID, GroupProxyAdmins); err != nil {
+			return err
+		}
+		return removeMember(ctx, tx, userID, GroupAdmins)
+	})
+}
+
+func userExists(ctx context.Context, tx *sql.Tx, userID int64) error {
+	var id int64
+	return notFound(tx.QueryRowContext(ctx, `SELECT id FROM users WHERE id = ?`, userID).Scan(&id))
+}
+
+func isMember(ctx context.Context, tx *sql.Tx, userID int64, group string) (bool, error) {
+	var n int
+	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM group_members m JOIN groups g ON g.id = m.group_id
+		WHERE g.name = ? AND m.user_id = ?`, group, userID).Scan(&n)
+	return n > 0, err
+}
+
 // SetUserCustomGroups makes the user's custom-group memberships exactly
 // names, in one transaction; built-in memberships are left as they are. It
 // fails with ErrNotFound when a group does not exist, and with

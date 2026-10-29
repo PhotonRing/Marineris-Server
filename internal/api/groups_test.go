@@ -151,8 +151,10 @@ func TestBuiltinGroupsCannotBeChangedFromTheGroupsPage(t *testing.T) {
 			for _, call := range [][3]string{
 				{"PUT", "/api/groups/" + g, `{"name":"renamed"}`},
 				{"DELETE", "/api/groups/" + g, ""},
-				{"PUT", memberPath(g, carol), ""},
-				{"DELETE", memberPath(g, e.userID("bob")), ""},
+				// Membership has its own Owner routes; any other spelling
+				// reaches the custom Group routes, which refuse it.
+				{"PUT", memberPath(strings.ToUpper(g), carol), ""},
+				{"DELETE", memberPath(strings.ToUpper(g), e.userID("bob")), ""},
 			} {
 				var body any
 				if call[2] != "" {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/photonring/marineris-server/internal/caddy"
+	"github.com/photonring/marineris-server/internal/store"
 )
 
 // Access levels.
@@ -160,6 +161,14 @@ func (s *Server) table() []Route {
 		{D, "/api/groups/{name}", StepUp, Administrator, false, s.handleGroupDelete},
 		{U, "/api/groups/{name}/members/{id}", Authed, Administrator, false, s.handleGroupMember(true)},
 		{D, "/api/groups/{name}/members/{id}", Authed, Administrator, false, s.handleGroupMember(false)},
+
+		// Owner powers: the built-in Groups' members (these literal paths
+		// win over /api/groups/{name}/...) and ownership handover
+		{U, "/api/groups/admins/members/{id}", StepUp, Owner, false, s.handleBuiltinMember(store.GroupAdmins, true)},
+		{D, "/api/groups/admins/members/{id}", StepUp, Owner, false, s.handleBuiltinMember(store.GroupAdmins, false)},
+		{U, "/api/groups/proxy-admins/members/{id}", StepUp, Owner, false, s.handleBuiltinMember(store.GroupProxyAdmins, true)},
+		{D, "/api/groups/proxy-admins/members/{id}", StepUp, Owner, false, s.handleBuiltinMember(store.GroupProxyAdmins, false)},
+		{P, "/api/owner", StepUp, Owner, false, s.handleOwnerTransfer},
 
 		// DNS profiles
 		{G, "/api/dns/providers", Authed, Administrator, false, s.handleDNSProviders},

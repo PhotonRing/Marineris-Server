@@ -121,6 +121,36 @@ func TestUsersAndTOTPReplay(t *testing.T) {
 	}
 }
 
+// Two handovers racing from the same Owner: only the first one wins.
+func TestStaleOwnershipHandoverIsRefused(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	alice := &User{Username: "alice", PasswordHash: "h", WebAuthnID: []byte("a")}
+	if err := s.CreateOwner(ctx, alice); err != nil {
+		t.Fatal(err)
+	}
+	var ids []int64
+	for _, n := range []string{"bob", "carol"} {
+		u := &User{Username: n, PasswordHash: "h", WebAuthnID: []byte(n)}
+		if err := s.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.AddGroupMember(ctx, u.ID, GroupAdmins); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, u.ID)
+	}
+	if err := s.TransferOwnership(ctx, alice.ID, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.TransferOwnership(ctx, alice.ID, ids[1]); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale handover: %v", err)
+	}
+	if id, _ := s.OwnerID(ctx); id != ids[0] {
+		t.Fatalf("owner %d, want bob (%d)", id, ids[0])
+	}
+}
+
 func TestFreshDatabaseHasNoOwner(t *testing.T) {
 	s := newStore(t)
 	id, err := s.OwnerID(context.Background())

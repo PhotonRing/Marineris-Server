@@ -710,6 +710,23 @@ const routes = [
     applied(`group ${p.name} deleted`, ['authelia']);
     return ok({ ok: true });
   })],
+  // Owner powers (listed before the custom Group routes: first match wins).
+  ['PUT', '/api/groups/admins/members/{id}', (p) => builtinMember('admins', p, true)],
+  ['DELETE', '/api/groups/admins/members/{id}', (p) => builtinMember('admins', p, false)],
+  ['PUT', '/api/groups/proxy-admins/members/{id}', (p) => builtinMember('proxy-admins', p, true)],
+  ['DELETE', '/api/groups/proxy-admins/members/{id}', (p) => builtinMember('proxy-admins', p, false)],
+  ['POST', '/api/owner', (p, b) => {
+    if (!db.session?.rights?.owner) return fail(403, 'not_allowed', 'you are not allowed to do this');
+    const u = db.users.find((x) => x.id === +b.user_id);
+    if (!u) return notFound();
+    if (u.id === ownerID()) return fail(409, 'self', 'you cannot do this to your own User');
+    if (!u.groups.includes('admins')) return fail(409, 'not_administrator', 'only Administrators can be Proxy & SSO Administrators or the Owner');
+    if (u.disabled) return fail(409, 'user_disabled', 'a Disabled User cannot become the Owner');
+    db.ownerID = u.id;
+    db.session.rights.owner = false;
+    audit('owner.transfer', u.username, 'from admin');
+    return ok({ ok: true });
+  }],
   ['PUT', '/api/groups/{name}/members/{id}', (p) => groupMember(p, true)],
   ['DELETE', '/api/groups/{name}/members/{id}', (p) => groupMember(p, false)],
 ];
@@ -749,8 +766,30 @@ function groupMember(p, add) {
   }));
 }
 
+// Same rules as internal/store (AddBuiltinMember, RemoveBuiltinMember).
+function builtinMember(group, p, add) {
+  if (!db.session?.rights?.owner) return fail(403, 'not_allowed', 'you are not allowed to do this');
+  const action = add ? 'group.member_add' : 'group.member_remove';
+  return withUser(p, (u) => {
+    if (add && group === 'proxy-admins' && !u.groups.includes('admins')) return fail(409, 'not_administrator', 'only Administrators can be Proxy & SSO Administrators or the Owner');
+    if (!add && group === 'admins' && u.groups.includes('admins')) {
+      if (db.users.filter((x) => x.groups.includes('admins')).length === 1) return fail(409, 'last_administrator', 'admins cannot lose its last member');
+      if (u.id === ownerID()) return fail(409, 'owner_administrator', 'the Owner stays an Administrator; hand ownership over first');
+    }
+    const drop = group === 'admins' ? ['admins', 'proxy-admins'] : [group];
+    u.groups = add ? [...new Set([...u.groups, group])].sort() : u.groups.filter((g) => !drop.includes(g));
+    audit(action, group, u.username);
+    applied(`${action} ${group} ${u.username}`, ['authelia']);
+    return ok(groupList().find((g) => g.name === group));
+  });
+}
+
+function ownerID() {
+  return db.ownerID ?? 1;
+}
+
 function userView(u) {
-  return { ...u, state: u.disabled ? 'disabled' : 'active', owner: u.id === 1 };
+  return { ...u, state: u.disabled ? 'disabled' : 'active', owner: u.id === ownerID() };
 }
 
 function withUser(p, fn) {

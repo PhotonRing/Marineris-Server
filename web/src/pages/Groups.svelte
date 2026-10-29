@@ -1,6 +1,7 @@
 <script>
   // Groups: create, rename and delete custom Groups, add and remove members.
-  // admins and proxy-admins are built-in: listed here, managed by the Owner.
+  // admins and proxy-admins are built-in: listed here, their members changed
+  // by the Owner only.
   // Only the Owner acts on Administrators and on the Owner; the controls
   // follow that rule, the API enforces it (mayActOn).
   import { onMount } from 'svelte';
@@ -31,14 +32,24 @@
     return viewerIsOwner || u.id === myID || (!u.owner && !u.groups.includes('admins'));
   }
 
-  function candidates(g) {
-    const inGroup = new Set(g.members.map((m) => m.id));
-    return users.filter((u) => !inGroup.has(u.id) && mayAct(u));
+  // The built-in Groups' members are the Owner's (with step-up); only
+  // Administrators join proxy-admins, and the Owner stays in admins.
+  function editable(g) {
+    return !g.builtin || viewerIsOwner;
   }
 
-  function memberMayBeRemoved(m) {
+  function candidates(g) {
+    const inGroup = new Set(g.members.map((m) => m.id));
+    return users.filter(
+      (u) => !inGroup.has(u.id) && mayAct(u) && (g.name !== 'proxy-admins' || u.groups.includes('admins')),
+    );
+  }
+
+  function memberMayBeRemoved(g, m) {
     const u = users.find((x) => x.id === m.id);
-    return u ? mayAct(u) : false;
+    if (!u || !editable(g)) return false;
+    if (g.name === 'admins' && (u.owner || g.members.length === 1)) return false;
+    return mayAct(u);
   }
 
   async function load() {
@@ -107,6 +118,9 @@
   }
 
   async function member(g, id, add) {
+    const u = users.find((x) => x.id === Number(id));
+    if (!add && g.name === 'admins' && u?.groups.includes('proxy-admins') &&
+      !confirm(`${u.username} also stops being a Proxy & SSO Administrator. Continue?`)) return;
     busy = 'member:' + g.name;
     try {
       const path = `/api/groups/${encodeURIComponent(g.name)}/members/${id}`;
@@ -156,7 +170,7 @@
         {#each g.members as m (m.id)}
           <span class="badge">
             <a href="/users/{m.id}" use:link>{m.display_name || m.username}</a>
-            {#if !g.builtin && memberMayBeRemoved(m)}
+            {#if memberMayBeRemoved(g, m)}
               <button
                 class="ghost small"
                 aria-label="Remove {m.username} from {g.name}"
@@ -169,7 +183,7 @@
           <span class="small muted">No members.</span>
         {/each}
       </div>
-      {#if g.builtin}
+      {#if !editable(g)}
         <p class="small muted">Managed by the Owner.</p>
       {:else if candidates(g).length}
         <div class="row">
