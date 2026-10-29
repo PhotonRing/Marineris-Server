@@ -179,13 +179,18 @@ test('a Reset link sets a new password and authenticator', async ({ browser }) =
   await owner.context().close();
 
   // While the link is pending, Authelia does not let her in with her old
-  // credentials.
-  await alice.close();
-  alice = await browser.newContext();
-  const page = await alice.newPage();
-  await page.goto(HELLO);
-  await autheliaFirstFactor(page, 'alice', ALICE_PASSWORD);
-  await expect(page.getByText(/incorrect username or password/i)).toBeVisible();
+  // credentials. It learns of the block when it reloads its users file, a
+  // moment after the link is created: retry, each time in a fresh browser,
+  // until it refuses.
+  let page;
+  await expect(async () => {
+    await alice.close();
+    alice = await browser.newContext();
+    page = await alice.newPage();
+    await page.goto(HELLO);
+    await autheliaFirstFactor(page, 'alice', ALICE_PASSWORD);
+    await expect(page.getByText(/incorrect username or password/i)).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 60_000 });
   await expect(page.locator('body')).not.toContainText(greets('alice'));
 
   await page.goto(url);

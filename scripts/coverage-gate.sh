@@ -17,7 +17,9 @@ while read -r line; do
     */internal/api|*/internal/secrets|*/internal/configmgr) min=65 ;;
     */internal/auth|*/internal/stacks) min=60 ;;
   esac
-  if [ "$(echo "$pct < $min" | bc)" -eq 1 ]; then
+  # awk is everywhere; bc is not (on CI runners its absence made every
+  # comparison fail open).
+  if awk -v p="$pct" -v m="$min" 'BEGIN { exit !(p < m) }'; then
     echo "::error::$pkg coverage $pct% is below the required $min%"
     fail=1
   fi

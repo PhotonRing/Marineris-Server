@@ -34,7 +34,9 @@ cd web && npm run dev
   allow-list validator in `internal/validate` (with a fuzz test), never through
   escaping.
 - Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
-  (`feat:`, `fix:`, `test:`, `docs:`, …) and user-visible changes get an entry
+  (`feat:`, `fix:`, `test:`, `docs:`, …). Pull requests are squash-merged, so
+  the PR title is the commit that lands on main: the PR title workflow checks
+  it (a release PR is `chore(release): X.Y.Z`). User-visible changes get an entry
   under *Unreleased* in `CHANGELOG.md`.
 - Branch names are descriptive (`phase-2-users-ui`, `fix-cert-renewal-alert`).
 
@@ -42,6 +44,10 @@ cd web && npm run dev
 
 Releases are automatic: see the top of [CHANGELOG.md](CHANGELOG.md). After a
 release, the workflow deletes every branch whose work is already in `main`.
+
+When a release changes what the hub looks like, regenerate the README's
+picture from the demo: `npm run build:demo` in `web/`, then
+`npm run screenshots` in `test/e2e/` (it writes `docs/images/hub.webp`).
 
 By contributing you agree that your contributions are licensed under the
 AGPL-3.0.

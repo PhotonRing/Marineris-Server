@@ -1,0 +1,28 @@
+name: PR title
+
+# Pull requests are squash-merged, so the title becomes the commit on main:
+# it must follow Conventional Commits (CONTRIBUTING.md). A workflow of its
+# own, so documentation-only pull requests and title edits are checked too.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  conventional:
+    name: Conventional Commits title
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Check the title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+          if printf '%s' "$TITLE" | grep -Eq "^($types)(\([a-z0-9._/-]+\))?!?: [^ ].*"; then
+            echo "ok: $TITLE"
+          else
+            echo "::error::PR title must follow Conventional Commits, e.g. \"feat: users and groups\" or \"fix(api): ...\" (types: ${types//|/, }). Got: $TITLE"
+            exit 1
+          fi

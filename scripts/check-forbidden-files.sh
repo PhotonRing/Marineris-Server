@@ -4,8 +4,16 @@
 set -eu
 status=0
 if [ "$#" -eq 0 ]; then
-  # Re-run with every tracked file as an argument (NUL-separated: safe with spaces).
-  git ls-files -z | xargs -0 "$0"
+  # A re-run with no files has nothing to check. Without this guard an empty
+  # file list would re-run the script with no arguments, forever.
+  [ -z "${CHECK_FORBIDDEN_FILES_CHILD:-}" ] || exit 0
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "not inside a git repository: pass the files to check as arguments" >&2
+    exit 2
+  fi
+  # Re-run with every tracked file as an argument (NUL-separated: safe with
+  # spaces); -r runs nothing when there are no files.
+  git ls-files -z | CHECK_FORBIDDEN_FILES_CHILD=1 xargs -0 -r sh "$0"
   exit $?
 fi
 for f in "$@"; do
