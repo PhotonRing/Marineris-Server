@@ -331,8 +331,9 @@ func TestSecretFilePermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	entries, _ := os.ReadDir(m.cfg.AutheliaSecrets())
-	if len(entries) != 3 {
-		t.Fatalf("expected 3 secrets, got %d", len(entries))
+	// JWT, session and storage keys, and Valkey's password.
+	if len(entries) != 4 {
+		t.Fatalf("expected 4 secrets, got %d", len(entries))
 	}
 	for _, e := range entries {
 		fi, _ := e.Info()

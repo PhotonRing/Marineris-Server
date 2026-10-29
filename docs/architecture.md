@@ -28,6 +28,7 @@
 | `marineris-init` | One-shot: data directory layout and generated secrets | same image |
 | `caddy` | Edge proxy, ACME (DNS-01/HTTP-01), CrowdSec bouncer, rate limits | custom xcaddy build, UID 65532 |
 | `authelia` | Forward-auth portal (2FA, passkeys) | upstream, UID 65532 |
+| `valkey` | Authelia's session store: signing in survives Authelia's restarts (configuration changes, upgrades) | upstream, UID 65532 |
 | `crowdsec` | Log analysis and ban decisions | upstream |
 | `socket-proxy` | Allow-list in front of the Docker API | wollomatic/socket-proxy |
 
@@ -45,7 +46,7 @@ Generated files:
 |---|---|
 | Caddy JSON | pushed through the admin API (unix socket); Caddy persists it in its own volume |
 | `data/authelia/configuration.yml`, `users_database.yml` | Authelia (read-only mount) |
-| `data/secrets/authelia/*` | Authelia `*_FILE` variables |
+| `data/secrets/authelia/*` | Authelia `*_FILE` variables; `redis` is also Valkey's password |
 | `data/secrets/crowdsec-bouncer.key` (0640) | CrowdSec registers it; Caddy uses it |
 | `data/stacks/<name>/compose.yaml`, `.env` (0600) | Docker Compose SDK |
 

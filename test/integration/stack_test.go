@@ -15,6 +15,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"os/exec"
 	"regexp"
@@ -346,6 +347,9 @@ networks:
 		}
 		return nil
 	})
+	// --- Signing in survives Authelia's restarts (sessions in Valkey) ------
+	sessionSurvivesRestarts(t, a, secret)
+
 	// Unknown hosts get nothing useful.
 	if status, _, _ := edgeGet(t, "https://unknown."+zone+"/", nil); status == 200 {
 		t.Fatal("unknown host served content")
@@ -447,6 +451,76 @@ networks:
 	}
 }
 
+// sessionSurvivesRestarts signs in through the Authelia portal, then edits a
+// route (which changes Authelia's configuration and restarts it) and
+// restarts Valkey: the same session must still open the protected route.
+func sessionSurvivesRestarts(t *testing.T, a *api, secret string) {
+	t.Helper()
+	jar, _ := cookiejar.New(nil)
+	c := edgeClient()
+	c.Jar = jar
+	post := func(path string, body map[string]any) {
+		t.Helper()
+		b, _ := json.Marshal(body)
+		req, _ := http.NewRequest("POST", "https://auth."+zone+path, bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		res, err := c.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		raw, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("%s: %d %s", path, res.StatusCode, raw)
+		}
+	}
+	target := "https://secure." + zone + "/"
+	signedIn := func() error {
+		res, err := c.Get(target)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		if res.StatusCode != 200 || !strings.Contains(string(b), "hello user=[admin]") {
+			return fmt.Errorf("status %d %q", res.StatusCode, b)
+		}
+		return nil
+	}
+	waitFor(t, "the authenticator registered in Authelia", 2*time.Minute, func() error {
+		// Authelia refuses a code it has seen: a new one each time.
+		code, _ := auth.TOTPCode(secret, auth.TOTPStep(time.Now()))
+		post("/api/firstfactor", map[string]any{"username": "admin", "password": password, "keepMeLoggedIn": false, "targetURL": target})
+		b, _ := json.Marshal(map[string]any{"token": code, "targetURL": target})
+		req, _ := http.NewRequest("POST", "https://auth."+zone+"/api/secondfactor/totp", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		res, err := c.Do(req)
+		if err != nil {
+			return err
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			time.Sleep(30 * time.Second)
+			return fmt.Errorf("second factor: %d", res.StatusCode)
+		}
+		return signedIn()
+	})
+
+	startedAt := func() string {
+		return strings.TrimSpace(docker(t, "inspect", "-f", "{{.State.StartedAt}}", "marineris-authelia"))
+	}
+	before := startedAt()
+	a.must("POST", "/api/routes", map[string]any{"name": "secure2", "host": "secure2." + zone, "kind": "container",
+		"target": map[string]any{"container": "it-web", "port": 8000}, "auth": "authelia", "enabled": true})
+	if startedAt() == before {
+		t.Fatal("the route change did not restart Authelia; the test proves nothing")
+	}
+	waitFor(t, "the session after Authelia's restart", time.Minute, signedIn)
+
+	docker(t, "restart", "marineris-valkey")
+	waitFor(t, "the session after Valkey's restart", time.Minute, signedIn)
+}
+
 // TestSocketProxyAllowList checks the Docker API restrictions from inside
 // the Marineris network namespace (the only allowed client).
 func TestSocketProxyAllowList(t *testing.T) {
@@ -502,7 +576,7 @@ func TestSocketProxyAllowList(t *testing.T) {
 
 // TestHardening checks the runtime security settings of the stack.
 func TestHardening(t *testing.T) {
-	for _, name := range []string{"marineris", "marineris-caddy", "marineris-authelia", "marineris-socket-proxy"} {
+	for _, name := range []string{"marineris", "marineris-caddy", "marineris-authelia", "marineris-valkey", "marineris-socket-proxy"} {
 		var info []struct {
 			Config struct {
 				User string

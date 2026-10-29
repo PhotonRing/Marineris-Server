@@ -82,8 +82,8 @@ every release.
 
 ## Try it on your computer
 
-The whole stack (Marineris, Caddy, Authelia, CrowdSec, socket proxy) runs on
-a Linux computer or Windows with WSL 2, with Docker as the only requirement.
+The whole stack (Marineris, Caddy, Authelia and its session store, CrowdSec,
+socket proxy) runs on a Linux computer or Windows with WSL 2, with Docker as the only requirement.
 It builds the images from your checkout, so it also tests unreleased changes:
 
 ```sh

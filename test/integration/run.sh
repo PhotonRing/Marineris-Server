@@ -38,7 +38,7 @@ cleanup() {
   status=$?
   if [ $status -ne 0 ] || [ "${KEEP:-0}" != "1" ]; then
     mkdir -p "$ROOT/test/integration/logs"
-    for c in marineris marineris-caddy marineris-authelia marineris-crowdsec marineris-socket-proxy marineris-it-pebble; do
+    for c in marineris marineris-caddy marineris-authelia marineris-valkey marineris-crowdsec marineris-socket-proxy marineris-it-pebble; do
       docker logs "$c" > "$ROOT/test/integration/logs/$c.log" 2>&1 || true
     done
   fi
@@ -55,7 +55,7 @@ $SUDO rm -rf "$IT_BASE"
 $SUDO mkdir -p "$IT_BASE"
 $SUDO chown "$(id -u):$(id -g)" "$IT_BASE"
 go run ./test/integration/gencerts "$IT_CERTS"
-$SUDO install -d -o 65532 -g 65532 -m 0700 "$DATA" "$DATA/stacks" "$DATA/static" "$DATA/authelia" "$DATA/authelia-notify" "$DATA/authelia-data"
+$SUDO install -d -o 65532 -g 65532 -m 0700 "$DATA" "$DATA/stacks" "$DATA/static" "$DATA/authelia" "$DATA/authelia-notify" "$DATA/authelia-data" "$DATA/authelia-sessions"
 $SUDO install -d -o 65532 -g 65532 -m 0700 "$DATA/secrets"
 
 cat > "$ENVFILE" <<EOF

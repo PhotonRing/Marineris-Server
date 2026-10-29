@@ -24,7 +24,7 @@ fi
 
 # Data directory owned by the unprivileged UID used by Marineris and Authelia.
 install -d -o 65532 -g 65532 -m 0700 "$MARINERIS_DATA"
-install -d -o 65532 -g 65532 -m 0700 "$MARINERIS_DATA/stacks" "$MARINERIS_DATA/static" "$MARINERIS_DATA/authelia" "$MARINERIS_DATA/authelia-notify" "$MARINERIS_DATA/authelia-data"
+install -d -o 65532 -g 65532 -m 0700 "$MARINERIS_DATA/stacks" "$MARINERIS_DATA/static" "$MARINERIS_DATA/authelia" "$MARINERIS_DATA/authelia-notify" "$MARINERIS_DATA/authelia-data" "$MARINERIS_DATA/authelia-sessions"
 install -d -o 65532 -g 65532 -m 0700 "$MARINERIS_DATA/secrets"
 
 gid="$(stat -c %g /var/run/docker.sock)"

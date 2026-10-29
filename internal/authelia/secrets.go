@@ -11,7 +11,13 @@ var secretFiles = map[string]string{
 	"AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE": "jwt",
 	"AUTHELIA_SESSION_SECRET_FILE":                                "session",
 	"AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE":                        "storage",
+	// Shared with Valkey, the session store (compose.yml).
+	"AUTHELIA_SESSION_REDIS_PASSWORD_FILE": SessionStorePasswordFile,
 }
+
+// SessionStorePasswordFile is the password of Valkey, Authelia's session
+// store, in Authelia's secrets folder.
+const SessionStorePasswordFile = "redis"
 
 // EnsureSecrets creates Authelia's secret files in dir when missing. Existing
 // secrets are never rotated implicitly: changing the storage key would make
