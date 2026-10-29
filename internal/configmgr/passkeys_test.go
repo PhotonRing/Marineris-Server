@@ -186,8 +186,8 @@ INSERT INTO webauthn_credentials (rpid, username, description, kid, discoverable
 	}
 	for _, table := range []string{"totp_configurations", "webauthn_users", "webauthn_credentials"} {
 		var carol, bob int
-		_ = db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE username = 'carol'`).Scan(&carol)
-		_ = db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE username = 'bob'`).Scan(&bob)
+		_ = db.QueryRow(`SELECT COUNT(*) FROM ` + table + ` WHERE username = 'carol'`).Scan(&carol)
+		_ = db.QueryRow(`SELECT COUNT(*) FROM ` + table + ` WHERE username = 'bob'`).Scan(&bob)
 		if carol != 0 || bob != 1 {
 			t.Errorf("%s: carol=%d bob=%d", table, carol, bob)
 		}
