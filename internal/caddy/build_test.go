@@ -360,6 +360,10 @@ func TestPortalLinkPageRoute(t *testing.T) {
 				if !strings.Contains(s, `"auth.example.com"`) || del < 0 || proxy < 0 || del > proxy {
 					t.Fatalf("link page route: %s", s)
 				}
+				// Only on the portal of the UI's domain, where links open.
+				if strings.Contains(s, "friend.org") || strings.Contains(s, "plain.net") {
+					t.Fatalf("link page on another domain's portal: %s", s)
+				}
 			} else if strings.Contains(s, `"dial":"authelia:9091"`) && strings.Contains(s, `"auth.example.com"`) && !strings.Contains(s, "forward") {
 				portal = i
 			}

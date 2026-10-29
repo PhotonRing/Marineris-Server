@@ -345,6 +345,15 @@ func TestLinkPageIsThrottledAndOnlyForThePortal(t *testing.T) {
 	if r := other.do("POST", "/marineris-link/api/read", nil); r.Status != 403 {
 		t.Fatalf("UI origin: %d %s", r.Status, r.Raw)
 	}
+	// From the portal of another domain: refused, links open on the UI
+	// domain's portal only.
+	if err := e.store.CreateDomain(context.Background(), &store.Domain{Name: "friend.org"}); err != nil {
+		t.Fatal(err)
+	}
+	other.origin = "https://auth.friend.org"
+	if r := other.do("POST", "/marineris-link/api/read", nil); r.Status != 403 || r.code() != "bad_origin" {
+		t.Fatalf("another portal's origin: %d %s", r.Status, r.Raw)
+	}
 	// Not on the local listener.
 	local := e.linkPage(token)
 	local.base = e.local.URL

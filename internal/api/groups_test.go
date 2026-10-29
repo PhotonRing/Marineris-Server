@@ -204,6 +204,50 @@ func TestMembersReachAutheliaAtOnce(t *testing.T) {
 	assertAudit(t, e, "group.member_add family true", "group.member_remove family true")
 }
 
+// Renaming or deleting a Group changes the Groups of its members: an
+// Administrator who is not the Owner may do it only when no other
+// Administrator, and not the Owner, is in it.
+func TestAdministratorCannotRenameOrDeleteAGroupOfAnotherAdministrator(t *testing.T) {
+	e := usersEnv(t)
+	e.addUser("erin", store.GroupAdmins, "family")
+	bob := e.signedIn("bob")
+	if r := bob.do("PUT", "/api/groups/family", `{"name":"relatives"}`); r.Status != 403 || r.code() != "owner_only" {
+		t.Errorf("rename with erin in it: %d %s", r.Status, r.Raw)
+	}
+	if r := bob.do("DELETE", "/api/groups/family", nil); r.Status != 403 || r.code() != "owner_only" {
+		t.Errorf("delete with erin in it: %d %s", r.Status, r.Raw)
+	}
+	bob.do("POST", "/api/groups", `{"name":"owners"}`)
+	if r := e.signedIn(testUser).do("PUT", memberPath("owners", e.userID(testUser)), nil); r.Status != 200 {
+		t.Fatalf("owner joins: %d %s", r.Status, r.Raw)
+	}
+	if r := bob.do("DELETE", "/api/groups/owners", nil); r.Status != 403 || r.code() != "owner_only" {
+		t.Errorf("delete with the Owner in it: %d %s", r.Status, r.Raw)
+	}
+	if _, still := groupsOf(t, bob)["family"]; !still {
+		t.Fatal("refused rename or delete happened")
+	}
+	assertAudit(t, e, "group.rename family false", "group.delete family false", "group.delete owners false")
+
+	// Alone among non-Administrators, bob may; the Owner always may.
+	bob.do("POST", "/api/groups", `{"name":"friends"}`)
+	bob.do("PUT", memberPath("friends", e.userID("bob")), nil)
+	bob.do("PUT", memberPath("friends", e.userID("carol")), nil)
+	if r := bob.do("PUT", "/api/groups/friends", `{"name":"pals"}`); r.Status != 200 {
+		t.Errorf("rename with bob and carol in it: %d %s", r.Status, r.Raw)
+	}
+	if r := bob.do("DELETE", "/api/groups/pals", nil); r.Status != 200 {
+		t.Errorf("delete with bob and carol in it: %d %s", r.Status, r.Raw)
+	}
+	owner := e.signedIn(testUser)
+	if r := owner.do("PUT", "/api/groups/family", `{"name":"relatives"}`); r.Status != 200 {
+		t.Errorf("Owner renames: %d %s", r.Status, r.Raw)
+	}
+	if r := owner.do("DELETE", "/api/groups/relatives", nil); r.Status != 200 {
+		t.Errorf("Owner deletes: %d %s", r.Status, r.Raw)
+	}
+}
+
 func TestAdministratorCannotChangeAnotherAdministratorsGroups(t *testing.T) {
 	e := usersEnv(t)
 	e.addUser("erin", store.GroupAdmins)

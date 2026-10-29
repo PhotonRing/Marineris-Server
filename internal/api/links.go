@@ -10,7 +10,6 @@ import (
 	"github.com/photonring/marineris-server/internal/caddy"
 	"github.com/photonring/marineris-server/internal/secrets"
 	"github.com/photonring/marineris-server/internal/store"
-	"github.com/photonring/marineris-server/internal/validate"
 )
 
 // Invites and Reset links, the Administrator's side: create one (its link is
@@ -26,6 +25,16 @@ type linkView struct {
 // linkPortal returns the address of the Authelia portal of the UI's domain,
 // where links open, or "" when the UI is on no managed domain.
 func (s *Server) linkPortal(ctx context.Context, st store.Settings) (string, error) {
+	host, err := s.linkPortalHost(ctx, st)
+	if host == "" || err != nil {
+		return "", err
+	}
+	return "https://" + host, nil
+}
+
+// linkPortalHost is linkPortal's host: the only one Caddy serves the link
+// page on (caddy.UIPortal), and the only origin its endpoints accept.
+func (s *Server) linkPortalHost(ctx context.Context, st store.Settings) (string, error) {
 	if st.UIHost == "" {
 		return "", nil
 	}
@@ -33,16 +42,24 @@ func (s *Server) linkPortal(ctx context.Context, st store.Settings) (string, err
 	if err != nil {
 		return "", err
 	}
+	names := make([]string, 0, len(domains))
 	for _, d := range domains {
-		if validate.HostInZone(st.UIHost, d.Name) {
-			return "https://" + st.AuthSubdomain + "." + d.Name, nil
-		}
+		names = append(names, d.Name)
 	}
-	return "", nil
+	return caddy.UIPortal(st, names), nil
 }
 
 var errNoPortal = &Error{Status: http.StatusConflict, Code: "no_portal",
 	Message: "links open on the Authelia portal of the UI's domain: add the UI's domain first"}
+
+// requireLinkPortal is linkPortal, errNoPortal when there is none.
+func (s *Server) requireLinkPortal(ctx context.Context, st store.Settings) (string, error) {
+	portal, err := s.linkPortal(ctx, st)
+	if err == nil && portal == "" {
+		err = errNoPortal
+	}
+	return portal, err
+}
 
 // newLinkToken returns a 256-bit random token and the hash that is stored.
 func newLinkToken() (token, hash string) {
@@ -63,22 +80,19 @@ func (s *Server) handleInviteCreate(w http.ResponseWriter, r *http.Request, rc *
 	ctx := r.Context()
 	username, err := cleanUsername(req.Username)
 	if err != nil {
-		return fieldError("username", err.Error())
+		return err
 	}
 	display := username
 	if strings.TrimSpace(req.DisplayName) != "" {
 		if display, err = cleanDisplayName(req.DisplayName); err != nil {
-			return fieldError("display_name", err.Error())
+			return err
 		}
 	}
 	email, err := cleanEmail(req.Email)
 	if err != nil {
-		return fieldError("email", err.Error())
+		return err
 	}
-	for i, g := range req.Groups {
-		req.Groups[i] = strings.ToLower(strings.TrimSpace(g))
-	}
-	ids, builtin, err := s.Store.GroupIDs(ctx, req.Groups)
+	ids, builtin, err := s.Store.GroupIDs(ctx, cleanGroupNames(req.Groups))
 	if errors.Is(err, store.ErrNotFound) {
 		return fieldError("groups", "no such Group")
 	} else if err != nil {
@@ -86,15 +100,11 @@ func (s *Server) handleInviteCreate(w http.ResponseWriter, r *http.Request, rc *
 	}
 	if builtin {
 		// Invites carry custom Groups only; the Owner makes Administrators.
-		s.audit(r, rc, "invite.create", username, false, errBuiltinGroups.Code)
-		return errBuiltinGroups
+		return s.auditRefusal(r, rc, "invite.create", username, "", errBuiltinGroups)
 	}
-	portal, err := s.linkPortal(ctx, rc.settings)
+	portal, err := s.requireLinkPortal(ctx, rc.settings)
 	if err != nil {
 		return err
-	}
-	if portal == "" {
-		return errNoPortal
 	}
 	token, hash := newLinkToken()
 	l := &store.Link{Username: username, DisplayName: display, Email: email, GroupIDs: ids, CreatedBy: rc.actor()}
@@ -143,11 +153,7 @@ func (s *Server) handleLinkRevoke(w http.ResponseWriter, r *http.Request, rc *re
 		if err != nil {
 			return err
 		}
-		if err := s.mayActOn(ctx, rc.user, u); err != nil {
-			var apiErr *Error
-			if errors.As(err, &apiErr) {
-				s.audit(r, rc, "reset.revoke", l.Username, false, apiErr.Code)
-			}
+		if err := s.checkActOn(r, rc, u, "reset.revoke", l.Username, ""); err != nil {
 			return err
 		}
 	}
@@ -182,12 +188,9 @@ func (s *Server) handleResetCreate(w http.ResponseWriter, r *http.Request, rc *r
 		return fieldError("resets", "must be password, second_factor or both")
 	}
 	ctx := r.Context()
-	portal, err := s.linkPortal(ctx, rc.settings)
+	portal, err := s.requireLinkPortal(ctx, rc.settings)
 	if err != nil {
 		return err
-	}
-	if portal == "" {
-		return errNoPortal
 	}
 	token, hash := newLinkToken()
 	l := &store.Link{UserID: u.ID, Resets: req.Resets, CreatedBy: rc.actor()}

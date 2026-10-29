@@ -65,6 +65,9 @@ server with; each of them signs in once and sees only their own apps.
 - The Marineris UI behind Authelia opens for every signed-in User (it was
   Administrators-only in Authelia); the API decides what each may do there.
   Administrators-only routes stay closed to everyone else.
+- API error codes: a disabled User's sign-in and open session are refused
+  with `user_disabled` (403), a User blocked by a Reset link with
+  `reset_pending` (403).
 - New web UI dependency: [uqr](https://github.com/unjs/uqr) 0.1.2 draws the
   QR codes of links in the browser, without any external service.
 - The online demo shows the version of its release (it showed 0.1.0).

@@ -99,9 +99,9 @@ func TestAdministratorEditsDisplayNameAndEmail(t *testing.T) {
 			t.Errorf("%q accepted: %d %s", bad, r.Status, r.Raw)
 		}
 	}
-	// Editing one's own profile is allowed.
+	// Editing one's own display name and e-mail is allowed.
 	if r := c.do("PUT", userPath(e.userID("bob"), ""), map[string]string{"display_name": "Bob", "email": ""}); r.Status != 200 {
-		t.Fatalf("own profile: %d %s", r.Status, r.Raw)
+		t.Fatalf("own User: %d %s", r.Status, r.Raw)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestDisablingEndsSessionsAndRefusesEverySignIn(t *testing.T) {
 	}
 	// The open session ends at once, and Authelia's vouching no longer
 	// opens a new one.
-	if r := carol.do("GET", "/api/auth/session", nil); r.Status != 403 || r.code() != "account_disabled" {
+	if r := carol.do("GET", "/api/auth/session", nil); r.Status != 403 || r.code() != "user_disabled" {
 		t.Fatalf("disabled User's session: %d %s", r.Status, r.Raw)
 	}
 	if c := e.autheliaClient("erin"); c.do("GET", "/api/hub", nil).Status != 403 || c.cookie != "" {
@@ -223,7 +223,7 @@ func TestDisablingEndsSessionsAndRefusesEverySignIn(t *testing.T) {
 	// Direct sign-in, on the edge and on the local listener.
 	e.setAutheliaProtection(false)
 	c := e.edgeClient()
-	if r := e.signInDirect(c, "erin", carolSecret); r.Status != 403 || r.code() != "account_disabled" || c.cookie != "" {
+	if r := e.signInDirect(c, "erin", carolSecret); r.Status != 403 || r.code() != "user_disabled" || c.cookie != "" {
 		t.Fatalf("direct sign-in of a Disabled User: %d %s", r.Status, r.Raw)
 	}
 	e.setAutheliaProtection(true)
@@ -231,7 +231,7 @@ func TestDisablingEndsSessionsAndRefusesEverySignIn(t *testing.T) {
 	if r := e.signedIn(testUser).do("POST", userPath(e.userID("frank"), "/disable"), nil); r.Status != 200 {
 		t.Fatalf("disable frank: %d %s", r.Status, r.Raw)
 	}
-	if r := e.signInDirect(e.localClient(), "frank", bobSecret); r.Status != 403 || r.code() != "account_disabled" {
+	if r := e.signInDirect(e.localClient(), "frank", bobSecret); r.Status != 403 || r.code() != "user_disabled" {
 		t.Fatalf("local sign-in of a Disabled Administrator: %d %s", r.Status, r.Raw)
 	}
 

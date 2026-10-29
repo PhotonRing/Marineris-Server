@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/photonring/marineris-server/internal/store"
@@ -61,8 +62,7 @@ func (s *Server) handleBuiltinMember(group string, add bool) func(http.ResponseW
 			err = s.Store.RemoveBuiltinMember(r.Context(), u.ID, group)
 		}
 		if refusal := ownerRefusal(err); refusal != nil {
-			s.audit(r, rc, action, group, false, u.Username+": "+refusal.Code)
-			return refusal
+			return s.auditRefusal(r, rc, action, group, u.Username+": ", refusal)
 		}
 		if err != nil {
 			return err
@@ -91,13 +91,15 @@ func (s *Server) handleOwnerTransfer(w http.ResponseWriter, r *http.Request, rc 
 		return errSelf
 	}
 	u, err := s.Store.GetUser(r.Context(), req.UserID)
+	if errors.Is(err, store.ErrNotFound) {
+		s.audit(r, rc, "owner.transfer", fmt.Sprintf("#%d", req.UserID), false, "not_found")
+	}
 	if err != nil {
 		return err
 	}
 	err = s.Store.TransferOwnership(r.Context(), rc.user.ID, u.ID)
 	if refusal := ownerRefusal(err); refusal != nil {
-		s.audit(r, rc, "owner.transfer", u.Username, false, refusal.Code)
-		return refusal
+		return s.auditRefusal(r, rc, "owner.transfer", u.Username, "", refusal)
 	}
 	if err != nil {
 		return err

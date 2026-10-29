@@ -87,17 +87,10 @@ func (s *Server) actOn(r *http.Request, rc *reqCtx, action string, self bool) (*
 	if err != nil {
 		return nil, err
 	}
-	var refusal error
 	if u.ID == rc.user.ID && !self {
-		refusal = errSelf
-	} else if err := s.mayActOn(r.Context(), rc.user, u); err != nil {
-		refusal = err
+		return u, s.auditRefusal(r, rc, action, u.Username, "", errSelf)
 	}
-	var apiErr *Error
-	if errors.As(refusal, &apiErr) {
-		s.audit(r, rc, action, u.Username, false, apiErr.Code)
-	}
-	return u, refusal
+	return u, s.checkActOn(r, rc, u, action, u.Username, "")
 }
 
 func (s *Server) handleUserUpdate(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
@@ -115,11 +108,11 @@ func (s *Server) handleUserUpdate(w http.ResponseWriter, r *http.Request, rc *re
 	}
 	name, err := cleanDisplayName(req.DisplayName)
 	if err != nil {
-		return fieldError("display_name", err.Error())
+		return err
 	}
 	email, err := cleanEmail(req.Email)
 	if err != nil {
-		return fieldError("email", err.Error())
+		return err
 	}
 	if err := s.Store.UpdateUserProfile(r.Context(), u.ID, name, email); err != nil {
 		return err
@@ -197,14 +190,10 @@ func (s *Server) handleUserGroups(w http.ResponseWriter, r *http.Request, rc *re
 	if err != nil {
 		return err
 	}
-	for i, g := range req.Groups {
-		req.Groups[i] = strings.ToLower(strings.TrimSpace(g))
-	}
-	err = s.Store.SetUserCustomGroups(r.Context(), u.ID, req.Groups)
+	err = s.Store.SetUserCustomGroups(r.Context(), u.ID, cleanGroupNames(req.Groups))
 	switch {
 	case errors.Is(err, store.ErrBuiltinGroup):
-		s.audit(r, rc, "user.groups", u.Username, false, errBuiltinGroups.Code)
-		return errBuiltinGroups
+		return s.auditRefusal(r, rc, "user.groups", u.Username, "", errBuiltinGroups)
 	case errors.Is(err, store.ErrNotFound):
 		return fieldError("groups", "no such Group")
 	case err != nil:

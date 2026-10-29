@@ -658,9 +658,9 @@ const routes = [
   ['PUT', '/api/users/{id}', (p, b) => withUser(p, (u) => {
     if ('username' in b) return fail(400, 'bad_request', 'invalid request body: unknown field "username"');
     const name = (b.display_name || '').trim();
-    if (!name || name.length > 64) return fail(400, 'invalid', 'display_name: must be 1 to 64 characters, without control characters', { field: 'display_name' });
+    if (!/^[\p{L}\p{N}]([\p{L}\p{N} ._()-]{0,62}[\p{L}\p{N}._()-])?$/u.test(name)) return fail(400, 'invalid', "display_name: must be 1-64 characters: letters, digits, spaces, '.', '_', '(', ')' or '-', starting with a letter or digit", { field: 'display_name' });
     const email = (b.email || '').trim();
-    if (email && !/^[^@\s]+@[^@\s]+$/.test(email)) return fail(400, 'invalid', 'email: must be a valid e-mail address', { field: 'email' });
+    if (email && !/^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(email)) return fail(400, 'invalid', 'email: must be an e-mail address like name@example.com', { field: 'email' });
     Object.assign(u, { display_name: name, email, updated_at: iso() });
     audit('user.update', u.username);
     applied(`user ${u.username} updated`, ['authelia']);
@@ -688,7 +688,7 @@ const routes = [
   // Invites (pending ones in db.links; nobody can accept them in the demo).
   ['POST', '/api/invites', (p, b) => {
     const username = (b.username || '').trim();
-    if (!/^[a-z0-9][a-z0-9._-]{1,31}$/.test(username)) return fail(400, 'invalid', "username: 2 to 32 lowercase letters, digits, '.', '_' or '-', starting with a letter or digit", { field: 'username' });
+    if (!/^[a-z0-9][a-z0-9._-]{1,31}$/.test(username)) return fail(400, 'invalid', "username: must be 2-32 characters: lowercase letters, digits, '.', '_' or '-', starting with a letter or digit", { field: 'username' });
     const links = (db.links ||= []);
     if (db.users.some((u) => u.username.toLowerCase() === username)) return fail(400, 'invalid', 'username: is already taken', { field: 'username' });
     if (links.some((l) => l.username === username)) return fail(400, 'invalid', 'username: is reserved by a pending Invite', { field: 'username' });

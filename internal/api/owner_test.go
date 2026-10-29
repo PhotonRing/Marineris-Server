@@ -184,7 +184,7 @@ func TestOwnershipHandover(t *testing.T) {
 	if r := handover(owner, e.userID(testUser)); !refused(r) {
 		t.Errorf("former Owner hands over again: %d %s", r.Status, r.Raw)
 	}
-	assertAudit(t, e, "owner.transfer carol false", "owner.transfer bob true")
+	assertAudit(t, e, "owner.transfer carol false", "owner.transfer #999 false", "owner.transfer bob true")
 }
 
 // Every User route acting on a User, and every custom Group member route,

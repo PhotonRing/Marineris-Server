@@ -121,7 +121,7 @@ test('an invited person accepts on the portal, signs in through Authelia and see
   await expect(page.getByAltText('Authenticator QR code')).toBeVisible();
   aliceSecret = (await page.locator('#secret').textContent()).trim();
   await page.getByLabel('Code').fill(await freshCode(aliceSecret));
-  await page.getByRole('button', { name: 'Create my account' }).click();
+  await page.getByRole('button', { name: /^Join / }).click();
 
   // On to Authelia's sign-in, which then opens the UI.
   await page.waitForURL((u) => u.href.startsWith(PORTAL) && !u.pathname.startsWith('/marineris-link'), leftLinkPage);
@@ -218,7 +218,7 @@ test('an Invite accepted with a passkey signs in with it alone', async ({ browse
   await page.getByLabel('Type it again').fill(BOB_PASSWORD);
   await page.getByLabel('Passkey', { exact: true }).check();
   await page.getByLabel('Name (optional)').fill('Virtual key');
-  await page.getByRole('button', { name: 'Create my account' }).click();
+  await page.getByRole('button', { name: /^Join / }).click();
   await page.waitForURL((u) => u.href.startsWith(PORTAL) && !u.pathname.startsWith('/marineris-link'), leftLinkPage);
 
   // The passkey alone signs in, on the portal, to the UI and the apps.

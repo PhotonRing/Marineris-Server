@@ -196,6 +196,7 @@ func TestOnlyOwnerOrProxyAdministratorChangesUIProtection(t *testing.T) {
 	if st, _ := e.store.GetSettings(context.Background()); st.AuthSubdomain == "login" || !st.UIProtectWithAuthelia {
 		t.Fatalf("refused change was stored: %+v", st)
 	}
+	assertAudit(t, e, "settings.update authelia false")
 	if r := put("dave", func(st map[string]any) { st["auth_subdomain"] = "login" }); r.Status != 200 {
 		t.Fatalf("proxy admin: %d %s", r.Status, r.Raw)
 	}

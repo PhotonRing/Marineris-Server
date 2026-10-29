@@ -100,14 +100,23 @@ func (s *Server) portalHosts(ctx context.Context, st store.Settings) (map[string
 	return out, nil
 }
 
-// checkPortalOrigin requires requests of the page to come from a portal host.
+// checkPortalOrigin requires requests of the page to come from a portal
+// host; for the link page, from the portal of the UI's domain only, the one
+// Caddy serves it on.
 func (s *Server) checkPortalOrigin(ctx context.Context, settings store.Settings, r *http.Request) *Error {
 	bad := &Error{Status: http.StatusForbidden, Code: "bad_origin", Message: "cross-origin request refused"}
 	u, err := url.Parse(r.Header.Get("Origin"))
 	if err != nil || u.Scheme != "https" || u.Host == "" {
 		return bad
 	}
-	hosts, err := s.portalHosts(ctx, settings)
+	var hosts map[string]bool
+	if strings.HasPrefix(r.URL.Path, caddy.PortalLinkPath+"/") {
+		var host string
+		host, err = s.linkPortalHost(ctx, settings)
+		hosts = map[string]bool{host: host != ""}
+	} else {
+		hosts, err = s.portalHosts(ctx, settings)
+	}
 	if err != nil || !hosts[u.Host] {
 		return bad
 	}

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/photonring/marineris-server/internal/secrets"
 )
 
 // Links are Invites and Reset links: one-time, expiring links whose token is
@@ -192,7 +194,7 @@ func (s *Store) pendingLinks(ctx context.Context, f linkFilter) ([]*Link, error)
 // the caller runs further queries on the single connection.
 func (s *Store) scanPendingLinks(ctx context.Context, f linkFilter) ([]*Link, error) {
 	now := s.now()
-	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, username, display_name, email, groups, COALESCE(user_id, 0), resets, created_by, created_at, expires_at, expires_at <= ?
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, username, display_name, email, groups, COALESCE(user_id, 0), resets, created_by, created_at, expires_at, expires_at <= ?, token_hash
 		FROM user_links
 		WHERE (? = '' OR token_hash = ?) AND (? = 0 OR id = ?) AND (? = 0 OR user_id = ?)
 			AND used_at IS NULL AND revoked_at IS NULL AND (expires_at > ? OR (? AND kind = 'reset'))
@@ -204,9 +206,14 @@ func (s *Store) scanPendingLinks(ctx context.Context, f linkFilter) ([]*Link, er
 	var out []*Link
 	for rows.Next() {
 		var l Link
-		var groups string
-		if err := rows.Scan(&l.ID, &l.Kind, &l.Username, &l.DisplayName, &l.Email, &groups, &l.UserID, &l.Resets, &l.CreatedBy, &l.CreatedAt, &l.ExpiresAt, &l.Expired); err != nil {
+		var groups, hash string
+		if err := rows.Scan(&l.ID, &l.Kind, &l.Username, &l.DisplayName, &l.Email, &groups, &l.UserID, &l.Resets, &l.CreatedBy, &l.CreatedAt, &l.ExpiresAt, &l.Expired, &hash); err != nil {
 			return nil, err
+		}
+		// The index found the row; the hashes are compared again in
+		// constant time, as the token is the credential.
+		if f.tokenHash != "" && !secrets.Equal(hash, f.tokenHash) {
+			continue
 		}
 		if err := json.Unmarshal([]byte(groups), &l.GroupIDs); err != nil {
 			return nil, err

@@ -38,7 +38,7 @@ async function finish(event) {
     return;
   }
   $('submit').disabled = true;
-  status(reset ? 'Saving…' : 'Creating your account…');
+  status(reset ? 'Saving…' : 'Joining…');
   // Only what the link sets.
   const body = {};
   if (sets.includes('password')) body.password = $('password').value;
@@ -50,13 +50,13 @@ async function finish(event) {
       const cred = await navigator.credentials.create({ publicKey: creationOptions(begun.options.publicKey) });
       body.passkey = serialize(cred);
       body.passkey_name = $('passkey-name').value.trim();
-      status(reset ? 'Saving…' : 'Creating your account…');
+      status(reset ? 'Saving…' : 'Joining…');
     } else if (sets.includes('second_factor')) {
       body.totp_code = $('code').value.trim();
     }
     const res = await call('finish', body);
     $('form').hidden = true;
-    status(reset ? 'Done. On to the sign-in…' : 'Your account is ready. On to the sign-in…', 'ok');
+    status(reset ? 'Done. On to the sign-in…' : "You're in. On to the sign-in…", 'ok');
     location.replace(res.redirect_url);
   } catch (err) {
     if (err?.name === 'NotAllowedError' || err?.name === 'AbortError') {
@@ -119,7 +119,8 @@ async function main() {
   } else {
     document.title = `Welcome to ${link.brand.name}`;
     $('title').textContent = `Welcome to ${link.brand.name}, ${link.display_name}`;
-    $('what').textContent = 'Choose a password and set up an authenticator app to create your account.';
+    $('what').textContent = `Choose a password and set up an authenticator app to join ${link.brand.name}.`;
+    $('submit').textContent = `Join ${link.brand.name}`;
   }
   $('username').value = link.username;
   show($('password').closest('label'), sets.includes('password'));

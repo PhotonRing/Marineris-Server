@@ -249,7 +249,7 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request, rc *r
 			return err
 		}
 		if !allowed {
-			return errNotAllowed
+			return s.auditRefusal(r, rc, "settings.update", "authelia", "ui_protect_with_authelia or auth_subdomain: ", errNotAllowed)
 		}
 	}
 	if next.UIHost != "" {

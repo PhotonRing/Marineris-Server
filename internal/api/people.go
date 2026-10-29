@@ -4,13 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/mail"
-	"regexp"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/photonring/marineris-server/internal/store"
+	"github.com/photonring/marineris-server/internal/validate"
 )
 
 // Rules shared by every endpoint acting on a User (Users, Groups, links).
@@ -45,6 +42,22 @@ func (s *Server) mayActOn(ctx context.Context, actor, target *store.User) error 
 	return nil
 }
 
+// checkActOn is mayActOn with the refusal audited: action on subject,
+// details prefix followed by the error code.
+func (s *Server) checkActOn(r *http.Request, rc *reqCtx, target *store.User, action, subject, prefix string) error {
+	return s.auditRefusal(r, rc, action, subject, prefix, s.mayActOn(r.Context(), rc.user, target))
+}
+
+// auditRefusal audits err as a refused action when it is an API refusal
+// (*Error), and returns err unchanged. Other errors are not refusals.
+func (s *Server) auditRefusal(r *http.Request, rc *reqCtx, action, subject, prefix string, err error) error {
+	var apiErr *Error
+	if errors.As(err, &apiErr) {
+		s.audit(r, rc, action, subject, false, prefix+apiErr.Code)
+	}
+	return err
+}
+
 // signInRefused tells why a User may not sign in, or nil. Every sign-in
 // path (password, passkey, Authelia's vouching) and every request with an
 // existing session asks it.
@@ -58,44 +71,48 @@ func signInRefused(u *store.User) *Error {
 	return nil
 }
 
-var errDisabled = &Error{Status: http.StatusForbidden, Code: "account_disabled",
+var errDisabled = &Error{Status: http.StatusForbidden, Code: "user_disabled",
 	Message: "this User is disabled; ask an Administrator to enable it"}
 
 var errResetPending = &Error{Status: http.StatusForbidden, Code: "reset_pending",
 	Message: "a Reset link is pending for this User: open it to set new credentials, or ask an Administrator to revoke it"}
 
-// cleanDisplayName validates a person's display name: 1 to 64 characters,
-// no control characters, no surrounding spaces.
+// The values below land in Authelia's users file: they go through
+// internal/validate's allow-lists, trimmed first. Errors name the field.
+
 func cleanDisplayName(v string) (string, error) {
 	v = strings.TrimSpace(v)
-	if v == "" || utf8.RuneCountInString(v) > 64 || strings.IndexFunc(v, unicode.IsControl) >= 0 {
-		return "", errors.New("must be 1 to 64 characters, without control characters")
+	if err := validate.DisplayName(v); err != nil {
+		return "", fieldError("display_name", err.Error())
 	}
 	return v, nil
 }
 
-// cleanEmail validates an optional e-mail address (empty: none).
+// cleanEmail: an optional e-mail address (empty: none).
 func cleanEmail(v string) (string, error) {
 	v = strings.TrimSpace(v)
 	if v == "" {
 		return "", nil
 	}
-	if a, err := mail.ParseAddress(v); err != nil || a.Address != v || len(v) > 254 {
-		return "", errors.New("must be a valid e-mail address")
+	if err := validate.Email(v); err != nil {
+		return "", fieldError("email", err.Error())
 	}
 	return v, nil
 }
 
-// usernameRE: what works as a Username in Authelia and in every app.
-var usernameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,31}$`)
-
-// cleanUsername validates a new Username: 2 to 32 lowercase letters,
-// digits, '.', '_' or '-', starting with a letter or digit. Uniqueness
-// (ignoring case) is the store's check.
 func cleanUsername(v string) (string, error) {
 	v = strings.TrimSpace(v)
-	if !usernameRE.MatchString(v) {
-		return "", errors.New("2 to 32 lowercase letters, digits, '.', '_' or '-', starting with a letter or digit")
+	if err := validate.Username(v); err != nil {
+		return "", fieldError("username", err.Error())
 	}
 	return v, nil
+}
+
+// cleanGroupNames trims and lowercases the Group names of a request in
+// place; the store refuses unknown ones.
+func cleanGroupNames(names []string) []string {
+	for i, g := range names {
+		names[i] = strings.ToLower(strings.TrimSpace(g))
+	}
+	return names
 }

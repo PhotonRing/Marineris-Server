@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/photonring/marineris-server/internal/store"
@@ -11,7 +10,8 @@ import (
 // The Groups page: Administrators create, rename and delete custom Groups
 // and change their members. The built-in admins and proxy-admins are only
 // listed here (errBuiltinGroups): their membership is the Owner's. Who may
-// be put in or taken out of a Group is mayActOn's decision (people.go).
+// be put in or taken out of a Group, and so who may rename or delete one, is
+// mayActOn's decision (people.go).
 // Every change re-renders Authelia's users file, which Authelia re-reads
 // without a restart.
 
@@ -65,8 +65,28 @@ func (s *Server) customGroup(r *http.Request, rc *reqCtx, action string) (*store
 		return nil, err
 	}
 	if g.Builtin {
-		s.audit(r, rc, action, g.Name, false, errBuiltinGroups.Code)
-		return nil, errBuiltinGroups
+		return nil, s.auditRefusal(r, rc, action, g.Name, "", errBuiltinGroups)
+	}
+	return g, nil
+}
+
+// wholeGroup is customGroup for renaming or deleting it, which changes the
+// Groups of every member: rc.user must be allowed to act on each of them
+// (mayActOn), so only the Owner touches a Group holding another
+// Administrator or the Owner.
+func (s *Server) wholeGroup(r *http.Request, rc *reqCtx, action string) (*store.Group, error) {
+	g, err := s.customGroup(r, rc, action)
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range g.Members {
+		u, err := s.Store.GetUser(r.Context(), m.ID)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.checkActOn(r, rc, u, action, g.Name, u.Username+": "); err != nil {
+			return nil, err
+		}
 	}
 	return g, nil
 }
@@ -76,7 +96,7 @@ func (s *Server) handleGroupRename(w http.ResponseWriter, r *http.Request, rc *r
 	if err != nil {
 		return err
 	}
-	g, err := s.customGroup(r, rc, "group.rename")
+	g, err := s.wholeGroup(r, rc, "group.rename")
 	if err != nil {
 		return err
 	}
@@ -93,7 +113,7 @@ func (s *Server) handleGroupRename(w http.ResponseWriter, r *http.Request, rc *r
 }
 
 func (s *Server) handleGroupDelete(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
-	g, err := s.customGroup(r, rc, "group.delete")
+	g, err := s.wholeGroup(r, rc, "group.delete")
 	if err != nil {
 		return err
 	}
@@ -122,11 +142,7 @@ func (s *Server) handleGroupMember(add bool) func(http.ResponseWriter, *http.Req
 		if err != nil {
 			return err
 		}
-		if err := s.mayActOn(r.Context(), rc.user, u); err != nil {
-			var apiErr *Error
-			if errors.As(err, &apiErr) {
-				s.audit(r, rc, action, g.Name, false, u.Username+": "+apiErr.Code)
-			}
+		if err := s.checkActOn(r, rc, u, action, g.Name, u.Username+": "); err != nil {
 			return err
 		}
 		if add {

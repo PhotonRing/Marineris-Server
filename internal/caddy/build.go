@@ -28,9 +28,9 @@ const (
 // Marineris page that adds Authelia passkeys.
 const PortalPasskeyPath = "/marineris-passkey"
 
-// PortalLinkPath is the path, on the Authelia portal's hosts, of the
-// Marineris page that opens Invites and Reset links: the invited person is
-// not signed in, and the UI's host may be behind Authelia.
+// PortalLinkPath is the path, on the Authelia portal of the UI's domain
+// (UIPortal), of the Marineris page that opens Invites and Reset links: the
+// invited person is not signed in, and the UI's host may be behind Authelia.
 const PortalLinkPath = "/marineris-link"
 
 var forwardAuthHeaders = []string{"Remote-User", "Remote-Groups", "Remote-Email", "Remote-Name"}
@@ -344,10 +344,14 @@ func servers(in Input) obj {
 		if UIServed(in) && in.Settings.UIProtectWithAuthelia {
 			routes = append(routes, hostRoute(portals, PortalPasskeyPath, page()))
 		}
-		// Invites and Reset links open there too, whether or not Authelia
-		// protects the UI.
-		if UIServed(in) {
-			routes = append(routes, hostRoute(portals, PortalLinkPath, page()))
+		// Invites and Reset links open on the portal of the UI's domain,
+		// whether or not Authelia protects the UI.
+		names := make([]string, 0, len(in.Domains))
+		for _, d := range in.Domains {
+			names = append(names, d.Name)
+		}
+		if p := UIPortal(in.Settings, names); p != "" {
+			routes = append(routes, hostRoute([]string{p}, PortalLinkPath, page()))
 		}
 		chain := shield(in, "authelia_portal", nil)
 		chain = append(chain, obj{"handler": "reverse_proxy", "upstreams": []obj{{"dial": in.Env.AutheliaUpstream}}})
@@ -416,6 +420,22 @@ func UIServed(in Input) bool {
 		}
 	}
 	return false
+}
+
+// UIPortal returns the host of the Authelia portal of the UI's domain (the
+// most specific managed domain holding the UI's host), where Invites and
+// Reset links open; "" when the UI is on no managed domain.
+func UIPortal(st store.Settings, domains []string) string {
+	zone := ""
+	for _, d := range domains {
+		if st.UIHost != "" && validate.HostInZone(st.UIHost, d) && len(d) > len(zone) {
+			zone = d
+		}
+	}
+	if zone == "" {
+		return ""
+	}
+	return st.AuthSubdomain + "." + zone
 }
 
 // coveredHosts lists the served hosts that a managed wildcard (or apex)
