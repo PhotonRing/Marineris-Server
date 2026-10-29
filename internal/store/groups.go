@@ -48,12 +48,12 @@ type GroupMember struct {
 // ListGroups returns every group, built-ins first then by name, each with
 // its members sorted by username.
 func (s *Store) ListGroups(ctx context.Context) ([]*Group, error) {
-	return s.groups(ctx, ``)
+	return s.groups(ctx, "")
 }
 
 // GetGroup returns one group with its members (ErrNotFound).
 func (s *Store) GetGroup(ctx context.Context, name string) (*Group, error) {
-	gs, err := s.groups(ctx, `WHERE g.name = ?`, name)
+	gs, err := s.groups(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -63,10 +63,12 @@ func (s *Store) GetGroup(ctx context.Context, name string) (*Group, error) {
 	return gs[0], nil
 }
 
-func (s *Store) groups(ctx context.Context, where string, args ...any) ([]*Group, error) {
+// groups returns the group named name, or every group when name is empty.
+func (s *Store) groups(ctx context.Context, name string) ([]*Group, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT g.name, g.builtin, g.created_at, u.id, u.username, u.display_name
 		FROM groups g LEFT JOIN group_members m ON m.group_id = g.id LEFT JOIN users u ON u.id = m.user_id
-		`+where+` ORDER BY g.builtin DESC, g.name, u.username`, args...)
+		WHERE ? = '' OR g.name = ?
+		ORDER BY g.builtin DESC, g.name, u.username`, name, name)
 	if err != nil {
 		return nil, err
 	}
