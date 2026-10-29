@@ -190,6 +190,10 @@ func configDoc(in Input) m {
 		},
 		"authentication_backend": m{
 			"password_reset": m{"disable": true},
+			// Re-read the User on every request (cheap with the file
+			// backend): disabling a User or changing their Groups takes
+			// effect on their next request, open sessions included.
+			"refresh_interval": "always",
 			"file": m{
 				"path":  UsersFile,
 				"watch": true,

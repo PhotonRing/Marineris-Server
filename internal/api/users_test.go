@@ -249,6 +249,78 @@ func TestDisablingEndsSessionsAndRefusesEverySignIn(t *testing.T) {
 	assertAudit(t, e, "user.disable erin true", "user.enable erin true")
 }
 
+func TestDeletingAUserNeedsStepUpAndRemovesEverything(t *testing.T) {
+	e := usersEnv(t)
+	carol := e.userID("carol")
+	carolSession := e.signedIn("carol")
+	e.autheliaKeys.handles = map[string]string{"auth.example.com/carol": "h"}
+
+	// Without a recent identity check, nothing happens.
+	stale := e.autheliaClient("bob")
+	stale.do("GET", "/api/auth/session", nil)
+	if r := stale.do("DELETE", userPath(carol, ""), nil); r.Status != 403 || r.code() != "reauth_required" {
+		t.Fatalf("delete without step-up: %d %s", r.Status, r.Raw)
+	}
+	if r := e.signedIn("bob").do("DELETE", userPath(carol, ""), nil); r.Status != 200 {
+		t.Fatalf("delete: %d %s", r.Status, r.Raw)
+	}
+	if _, err := e.store.GetUser(context.Background(), carol); err == nil {
+		t.Fatal("carol still exists")
+	}
+	if r := carolSession.do("GET", "/api/auth/session", nil); r.Status != 403 || r.code() != "no_account" {
+		t.Fatalf("deleted User's session: %d %s", r.Status, r.Raw)
+	}
+	if _, found := e.autheliaUsers()["carol"]; found {
+		t.Fatal("carol still in Authelia's users file")
+	}
+	if len(e.autheliaKeys.handles) != 0 {
+		t.Fatalf("carol's Authelia passkeys kept: %v", e.autheliaKeys.handles)
+	}
+	// Created again with the same Username, the User starts in no Group.
+	e.addUser("carol")
+	if r := e.signedIn("bob").do("GET", userPath(e.userID("carol"), ""), nil); fmt.Sprint(r.Body["groups"]) != "[]" {
+		t.Fatalf("new carol: %s", r.Raw)
+	}
+	assertAudit(t, e, "user.delete carol true")
+}
+
+func TestAdministratorSetsCustomGroupsOfAUser(t *testing.T) {
+	e := usersEnv(t)
+	ctx := context.Background()
+	for _, g := range []string{"friends", "media"} {
+		if err := e.store.CreateGroup(ctx, g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bob := e.signedIn("bob")
+	carol := e.userID("carol")
+	r := bob.do("PUT", userPath(carol, "/groups"), map[string]any{"groups": []string{"friends", "media"}})
+	if r.Status != 200 || fmt.Sprint(r.Body["groups"]) != "[friends media]" {
+		t.Fatalf("set groups: %d %s", r.Status, r.Raw)
+	}
+	if got := e.autheliaUsers()["carol"].Groups; fmt.Sprint(got) != "[friends media]" {
+		t.Fatalf("Authelia groups: %v", got)
+	}
+	// Built-in Groups are the Owner's (ticket 09): asking for one here is
+	// refused and changes nothing.
+	r = bob.do("PUT", userPath(carol, "/groups"), map[string]any{"groups": []string{"friends", store.GroupAdmins}})
+	if r.Status != 403 || r.code() != "builtin_group" {
+		t.Fatalf("admins through the User page: %d %s", r.Status, r.Raw)
+	}
+	if r := bob.do("PUT", userPath(carol, "/groups"), map[string]any{"groups": []string{"nope"}}); r.Status != 400 {
+		t.Fatalf("unknown Group: %d %s", r.Status, r.Raw)
+	}
+	// Setting the custom Groups of the Owner keeps them in admins.
+	owner := e.signedIn(testUser)
+	if r := owner.do("PUT", userPath(e.userID(testUser), "/groups"), map[string]any{"groups": []string{"media"}}); fmt.Sprint(r.Body["groups"]) != "[admins media]" {
+		t.Fatalf("Owner's groups: %d %s", r.Status, r.Raw)
+	}
+	if r := owner.do("PUT", userPath(e.userID(testUser), "/groups"), map[string]any{"groups": []string{}}); fmt.Sprint(r.Body["groups"]) != "[admins]" {
+		t.Fatalf("Owner's groups emptied: %d %s", r.Status, r.Raw)
+	}
+	assertAudit(t, e, "user.groups carol true", "user.groups carol false")
+}
+
 // assertAudit checks that each "action target success" is in the audit log.
 func assertAudit(t *testing.T, e *env, want ...string) {
 	t.Helper()
