@@ -287,6 +287,16 @@ func (s *Server) wrap(listener string, rt Route) http.Handler {
 				s.fail(w, r, err)
 				return
 			}
+			if refusal := signInRefused(u); refusal != nil {
+				// Sessions end when the User is disabled; one that
+				// survived anyway ends now.
+				if err := s.Sessions.Destroy(ctx, w, r); err != nil {
+					s.fail(w, r, err)
+					return
+				}
+				writeError(w, refusal)
+				return
+			}
 			if isUnsafe(r.Method) && !secrets.Equal(r.Header.Get("X-CSRF-Token"), se.CSRFToken) {
 				writeError(w, &Error{Status: http.StatusForbidden, Code: "csrf", Message: "missing or invalid CSRF token"})
 				return

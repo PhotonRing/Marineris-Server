@@ -79,6 +79,23 @@ func (f *fakeAutheliaPasskeys) DeleteAutheliaPasskey(_ context.Context, username
 	return store.ErrNotFound
 }
 
+func (f *fakeAutheliaPasskeys) DeleteAutheliaUser(_ context.Context, username string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.keys) - 1; i >= 0; i-- {
+		if f.added[i].Username == username {
+			f.keys = append(f.keys[:i], f.keys[i+1:]...)
+			f.added = append(f.added[:i], f.added[i+1:]...)
+		}
+	}
+	for k := range f.handles {
+		if strings.HasSuffix(k, "/"+username) {
+			delete(f.handles, k)
+		}
+	}
+	return nil
+}
+
 // authenticator is a software passkey ("none" attestation, ES256).
 type authenticator struct {
 	key  *ecdsa.PrivateKey

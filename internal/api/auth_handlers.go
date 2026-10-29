@@ -297,6 +297,11 @@ func (s *Server) verifyUserTOTP(ctx context.Context, u *store.User, code string)
 }
 
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, rc *reqCtx, u *store.User, method string) error {
+	// Refused after both factors, like the local listener's rule below.
+	if refusal := signInRefused(u); refusal != nil {
+		s.audit(r, rc, "login", u.Username, false, refusal.Code)
+		return refusal
+	}
 	if rc.listener == Local && !u.IsAdministrator() {
 		// The break-glass listener is for Administrators only. Refused
 		// after both factors, so this tells nothing to someone without
@@ -357,7 +362,7 @@ func (s *Server) handlePasskeyLoginFinish(w http.ResponseWriter, r *http.Request
 	}
 	s.Throttle.Succeed(ip)
 	// Already logged in as the same user: this is a step-up confirmation.
-	if se, cur, err := s.Sessions.Load(r.Context(), r); err == nil && cur.ID == u.ID {
+	if se, cur, err := s.Sessions.Load(r.Context(), r); err == nil && cur.ID == u.ID && signInRefused(cur) == nil {
 		if err := s.Sessions.MarkAuth(r.Context(), se); err != nil {
 			return err
 		}

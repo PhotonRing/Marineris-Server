@@ -8,6 +8,7 @@ DELETE /api/routes/{id}                           authed  admin  both
 DELETE /api/routes/{id}/icon                      authed  admin  both
 DELETE /api/stacks/{name}                         stepup  admin  both
 DELETE /api/stacks/{name}/icons/{service}         authed  admin  both
+DELETE /api/users/{id}                            stepup  admin  both
 DELETE /api/volumes/{name}                        stepup  admin  both
 GET    /api/account/authelia-passkeys             authed  user   both
 GET    /api/account/passkeys                      authed  user   both
@@ -40,6 +41,8 @@ GET    /api/stacks/{name}                         authed  admin  both
 GET    /api/stacks/{name}/icons/{service}         authed  admin  both
 GET    /api/stacks/{name}/services                authed  admin  both
 GET    /api/system/stats                          authed  admin  both
+GET    /api/users                                 authed  admin  both
+GET    /api/users/{id}                            authed  admin  both
 GET    /api/volumes                               authed  admin  both
 POST   /api/account/authelia-passkeys             stepup  user   both
 POST   /api/account/passkeys/begin                stepup  user   both
@@ -79,6 +82,8 @@ POST   /api/stacks/{name}/services/{service}/start authed  admin  both
 POST   /api/stacks/{name}/services/{service}/stop authed  admin  both
 POST   /api/stacks/{name}/services/{service}/update authed  admin  both
 POST   /api/stacks/{name}/start                   authed  admin  both
+POST   /api/users/{id}/disable                    authed  admin  both
+POST   /api/users/{id}/enable                     authed  admin  both
 POST   /marineris-passkey/api/begin               ticket  anyone edge
 POST   /marineris-passkey/api/finish              ticket  anyone edge
 PUT    /api/branding                              stepup  admin  both
@@ -91,3 +96,5 @@ PUT    /api/settings                              stepup  admin  both
 PUT    /api/stacks/{name}                         authed  admin  both
 PUT    /api/stacks/{name}/icons/{service}         authed  admin  both
 PUT    /api/stacks/{name}/services/{service}      authed  admin  both
+PUT    /api/users/{id}                            authed  admin  both
+PUT    /api/users/{id}/groups                     authed  admin  both

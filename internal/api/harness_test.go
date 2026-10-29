@@ -317,8 +317,14 @@ func (e *env) login(c *client, secret string) resp {
 
 func (e *env) freshCode(secret string) string {
 	e.t.Helper()
+	return e.unusedCode(testUser, secret)
+}
+
+// unusedCode returns a TOTP code that user's replay protection accepts.
+func (e *env) unusedCode(user, secret string) string {
+	e.t.Helper()
 	ctx := context.Background()
-	u, err := e.store.GetUserByName(ctx, testUser)
+	u, err := e.store.GetUserByName(ctx, user)
 	if err != nil {
 		e.t.Fatal(err)
 	}

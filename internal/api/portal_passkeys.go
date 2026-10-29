@@ -38,6 +38,9 @@ type AutheliaPasskeyStore interface {
 	AutheliaUserHandle(ctx context.Context, rpid, username string) (string, error)
 	AddAutheliaPasskey(ctx context.Context, p configmgr.NewAutheliaPasskey) error
 	DeleteAutheliaPasskey(ctx context.Context, username string, id int64) error
+	// DeleteAutheliaUser removes everything Authelia keeps for a deleted
+	// User (passkeys, authenticator).
+	DeleteAutheliaUser(ctx context.Context, username string) error
 }
 
 const portalTicketTTL = 5 * time.Minute

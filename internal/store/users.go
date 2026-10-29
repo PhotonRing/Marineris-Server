@@ -192,6 +192,33 @@ func (s *Store) ListUsers(ctx context.Context) ([]*User, error) {
 	return out, rows.Err()
 }
 
+// UpdateUserProfile replaces a user's display name and e-mail. Nothing
+// changes a username: sessions, passkeys and app accounts are keyed by it.
+func (s *Store) UpdateUserProfile(ctx context.Context, id int64, displayName, email string) error {
+	return s.execOne(ctx, `UPDATE users SET display_name = ?, email = ?, updated_at = ? WHERE id = ?`, displayName, email, s.now(), id)
+}
+
+// SetUserDisabled disables or enables a user. Disabling also ends all of the
+// user's sessions, in the same transaction.
+func (s *Store) SetUserDisabled(ctx context.Context, id int64, disabled bool) error {
+	return s.tx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE users SET disabled = ?, updated_at = ? WHERE id = ?`, disabled, s.now(), id)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return ErrNotFound
+		}
+		if !disabled {
+			return nil
+		}
+		_, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, id)
+		return err
+	})
+}
+
 // SetPasswordHash replaces a user's password hash.
 func (s *Store) SetPasswordHash(ctx context.Context, id int64, hash string) error {
 	return s.execOne(ctx, `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, hash, s.now(), id)
