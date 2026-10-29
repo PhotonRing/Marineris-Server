@@ -651,7 +651,59 @@ const routes = [
     return ok({ ok: true });
   }],
   ['POST', '/api/config/apply', () => { applied('manual apply', ['caddy', 'authelia']); return ok({ ok: true, at: iso() }); }],
+
+  // Users (the demo visitor is the Owner, user 1).
+  ['GET', '/api/users', () => ok(db.users.map(userView))],
+  ['GET', '/api/users/{id}', (p) => withUser(p, (u) => ok(userView(u)))],
+  ['PUT', '/api/users/{id}', (p, b) => withUser(p, (u) => {
+    if ('username' in b) return fail(400, 'bad_request', 'invalid request body: unknown field "username"');
+    const name = (b.display_name || '').trim();
+    if (!name || name.length > 64) return fail(400, 'invalid', 'display_name: must be 1 to 64 characters, without control characters', { field: 'display_name' });
+    const email = (b.email || '').trim();
+    if (email && !/^[^@\s]+@[^@\s]+$/.test(email)) return fail(400, 'invalid', 'email: must be a valid e-mail address', { field: 'email' });
+    Object.assign(u, { display_name: name, email, updated_at: iso() });
+    audit('user.update', u.username);
+    applied(`user ${u.username} updated`, ['authelia']);
+    return ok(userView(u));
+  })],
+  ['PUT', '/api/users/{id}/groups', (p, b) => withUser(p, (u) => {
+    const want = b.groups || [];
+    if (want.some((g) => g === 'admins' || g === 'proxy-admins')) return fail(403, 'builtin_group', 'admins and proxy-admins are managed by the Owner');
+    if (want.some((g) => !db.groupNames.includes(g))) return fail(400, 'invalid', 'groups: no such Group', { field: 'groups' });
+    u.groups = [...u.groups.filter((g) => g === 'admins' || g === 'proxy-admins'), ...want].sort();
+    audit('user.groups', u.username, want.join(','));
+    applied(`groups of ${u.username} changed`, ['authelia']);
+    return ok(userView(u));
+  })],
+  ['POST', '/api/users/{id}/disable', (p) => setUserDisabled(p, true)],
+  ['POST', '/api/users/{id}/enable', (p) => setUserDisabled(p, false)],
+  ['DELETE', '/api/users/{id}', (p) => withUser(p, (u) => {
+    if (u.id === 1) return fail(409, 'self', 'you cannot do this to your own User');
+    db.users = db.users.filter((x) => x !== u);
+    audit('user.delete', u.username);
+    applied(`user ${u.username} deleted`, ['authelia']);
+    return ok({ ok: true });
+  })],
 ];
+
+function userView(u) {
+  return { ...u, state: u.disabled ? 'disabled' : 'active', owner: u.id === 1 };
+}
+
+function withUser(p, fn) {
+  const u = db.users.find((x) => x.id === +p.id);
+  return u ? fn(u) : notFound();
+}
+
+function setUserDisabled(p, disabled) {
+  return withUser(p, (u) => {
+    if (u.id === 1) return fail(409, 'self', 'you cannot do this to your own User');
+    u.disabled = disabled;
+    audit(disabled ? 'user.disable' : 'user.enable', u.username);
+    applied(`${disabled ? 'user.disable' : 'user.enable'} ${u.username}`, ['authelia']);
+    return ok(userView(u));
+  });
+}
 
 const compiled = routes.map(([method, pattern, fn]) => {
   const names = [];

@@ -58,6 +58,13 @@ export function seed() {
   return {
     meta: { listener: 'edge', name: 'Marineris', setup_complete: true, ui_host: 'mars.example', version: '0.1.0 (demo)' },
     user: admin,
+    // The Users page (admin is the Owner).
+    users: [
+      admin,
+      { id: 2, username: 'lea', display_name: 'Léa', email: 'lea@mars.example', disabled: false, groups: ['family'], created_at: ago(20000), updated_at: ago(20000) },
+      { id: 3, username: 'marc', display_name: 'Marc', email: '', disabled: true, groups: ['friends'], created_at: ago(9000), updated_at: ago(600) },
+    ],
+    groupNames: ['family', 'friends'],
     session: {
       auth_at: ago(5), csrf_token: 'demo', expires_at: new Date(now + 12 * 3600000).toISOString(),
       method: 'passkey', step_up_ok: true, user: admin,

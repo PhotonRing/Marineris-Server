@@ -22,6 +22,9 @@
   import Settings from './pages/Settings.svelte';
   import Account from './pages/Account.svelte';
   import NotAllowed from './pages/NotAllowed.svelte';
+  import Users from './pages/Users.svelte';
+  import UserDetail from './pages/UserDetail.svelte';
+  import UsersIcon from '@lucide/svelte/icons/users';
   import House from '@lucide/svelte/icons/house';
   import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
   import Box from '@lucide/svelte/icons/box';
@@ -51,6 +54,7 @@
     { path: '/domains', label: 'Domains & certificates', icon: GlobeLock, component: Domains, admin: true },
     { path: '/dns', label: 'DNS profiles', icon: Network, component: DNS, admin: true },
     { section: 'System', admin: true },
+    { path: '/users', label: 'Users', icon: UsersIcon, component: Users, admin: true },
     { path: '/proxy', label: 'Proxy & SSO', icon: FileCog, component: Config, admin: true },
     { path: '/audit', label: 'Audit log', icon: ScrollText, component: Audit, admin: true },
     { path: '/settings', label: 'Settings', icon: Settings2, component: Settings, admin: true },
@@ -67,6 +71,8 @@
   let current = $derived.by(() => {
     const page = $path.startsWith('/stacks/')
       ? { path: $path, nav: '/stacks', label: 'Stacks', component: StackDetail, admin: true }
+      : $path.startsWith('/users/')
+      ? { path: $path, nav: '/users', label: 'User', component: UserDetail, admin: true }
       : pages.find((p) => p.path === ($path === '/' ? (isAdmin && app.home === 'dashboard' ? '/dashboard' : '/hub') : $path)) || pages[0];
     return page.admin && !isAdmin ? { path: page.path, label: 'Not allowed', component: NotAllowed } : page;
   });
