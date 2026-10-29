@@ -2,7 +2,7 @@ GO       ?= go
 VERSION  ?= dev
 BIN      := bin/marineris
 
-.PHONY: all ui build test lint fuzz e2e integration images dev-server clean
+.PHONY: all ui build test lint check fuzz e2e integration images dev-server clean
 
 all: ui build
 
@@ -19,6 +19,10 @@ test:
 lint:
 	golangci-lint run --build-tags integration ./...
 	scripts/check-forbidden-files.sh
+
+# Every pre-push check in one command (runs Go in Docker when there is no Go).
+check:
+	scripts/check.sh
 
 fuzz:
 	@for t in $$(grep -rho 'func Fuzz[A-Za-z]*' --include=*_test.go internal | sed 's/func //' | sort -u); do \
