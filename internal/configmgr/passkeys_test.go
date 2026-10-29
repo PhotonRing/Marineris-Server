@@ -193,3 +193,33 @@ INSERT INTO webauthn_credentials (rpid, username, description, kid, discoverable
 		}
 	}
 }
+
+// A second-factor reset removes the authenticator and passkeys, and keeps
+// the User's WebAuthn handle.
+func TestDeleteAutheliaSecondFactors(t *testing.T) {
+	m, _, _, _ := setup(t)
+	ctx := context.Background()
+	if err := m.DeleteAutheliaSecondFactors(ctx, "carol"); !errors.Is(err, ErrAutheliaNotReady) {
+		t.Fatalf("before Authelia started: %v", err)
+	}
+	db := autheliaDB(t, m)
+	if _, err := db.Exec(`
+CREATE TABLE totp_configurations (id INTEGER PRIMARY KEY, username VARCHAR(100) NOT NULL, secret BLOB NOT NULL);
+INSERT INTO totp_configurations (username, secret) VALUES ('carol', x'01'), ('bob', x'02');
+INSERT INTO webauthn_users (rpid, username, userid) VALUES ('auth.example.com', 'carol', 'h1');
+INSERT INTO webauthn_credentials (rpid, username, description, kid, discoverable, public_key)
+	VALUES ('auth.example.com', 'carol', 'Phone', 'AQ==', 1, x'00'), ('auth.example.com', 'bob', 'Key', 'Ag==', 1, x'00');`); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.DeleteAutheliaSecondFactors(ctx, "carol"); err != nil {
+		t.Fatal(err)
+	}
+	for table, want := range map[string]int{"totp_configurations": 0, "webauthn_credentials": 0, "webauthn_users": 1} {
+		var carol, bob int
+		_ = db.QueryRow(`SELECT COUNT(*) FROM ` + table + ` WHERE username = 'carol'`).Scan(&carol)
+		_ = db.QueryRow(`SELECT COUNT(*) FROM ` + table + ` WHERE username = 'bob'`).Scan(&bob)
+		if carol != want || (table != "webauthn_users" && bob != 1) {
+			t.Errorf("%s: carol=%d bob=%d", table, carol, bob)
+		}
+	}
+}

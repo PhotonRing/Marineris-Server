@@ -256,10 +256,27 @@ var autheliaUserTables = []string{
 	"user_opaque_identifier",
 }
 
+// autheliaSecondFactorTables are the tables of Authelia 4.39 holding a
+// User's authenticator and passkeys. The WebAuthn user handle
+// (webauthn_users) stays: it is the User's, not a device's.
+var autheliaSecondFactorTables = []string{"totp_configurations", "totp_history", "webauthn_credentials"}
+
 // DeleteAutheliaUser removes what Authelia keeps for a deleted User, so that
 // a later User with the same Username inherits nothing. Tables this version
 // of Authelia does not have are skipped.
 func (m *Manager) DeleteAutheliaUser(ctx context.Context, username string) error {
+	return m.deleteAutheliaRows(ctx, username, autheliaUserTables)
+}
+
+// DeleteAutheliaSecondFactors removes a User's authenticator and passkeys
+// from Authelia, so that a lost device no longer signs in.
+func (m *Manager) DeleteAutheliaSecondFactors(ctx context.Context, username string) error {
+	return m.deleteAutheliaRows(ctx, username, autheliaSecondFactorTables)
+}
+
+// deleteAutheliaRows removes username's rows from the given tables, in one
+// transaction; tables this version of Authelia does not have are skipped.
+func (m *Manager) deleteAutheliaRows(ctx context.Context, username string, tables []string) error {
 	db, err := m.autheliaDB()
 	if err != nil {
 		return err
@@ -270,7 +287,7 @@ func (m *Manager) DeleteAutheliaUser(ctx context.Context, username string) error
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	for _, table := range autheliaUserTables {
+	for _, table := range tables {
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'username'`, table).Scan(&n); err != nil {
 			return err
@@ -278,7 +295,7 @@ func (m *Manager) DeleteAutheliaUser(ctx context.Context, username string) error
 		if n == 0 {
 			continue
 		}
-		// table comes from the fixed list above, never from a request.
+		// table comes from the fixed lists above, never from a request.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE username = ?`, username); err != nil { //nolint:gosec // fixed table names
 			return fmt.Errorf("removing %s from Authelia's %s: %w", username, table, err)
 		}

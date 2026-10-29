@@ -17,16 +17,20 @@ import (
 // userView is a User as the Users page shows it.
 type userView struct {
 	*store.User
-	// State: active or disabled (Invite and reset pending come with the
-	// links).
+	// State: active, disabled or reset pending (pending Invites are not
+	// Users: they come with the links).
 	State string `json:"state"`
 	Owner bool   `json:"owner"`
+	// Reset is the Reset link blocking the User, on the User's own page.
+	Reset *store.Link `json:"reset,omitempty"`
 }
 
 func viewOf(u *store.User, owner int64) userView {
 	state := "active"
 	if u.Disabled {
 		state = "disabled"
+	} else if u.ResetPending {
+		state = "reset pending"
 	}
 	return userView{User: u, State: state, Owner: u.ID == owner}
 }
@@ -53,11 +57,18 @@ func (s *Server) handleUserGet(w http.ResponseWriter, r *http.Request, rc *reqCt
 	if err != nil {
 		return err
 	}
-	owner, err := s.Store.OwnerID(r.Context())
+	ctx := r.Context()
+	owner, err := s.Store.OwnerID(ctx)
 	if err != nil {
 		return err
 	}
-	return ok(w, viewOf(u, owner))
+	v := viewOf(u, owner)
+	if u.ResetPending {
+		if v.Reset, err = s.Store.UserReset(ctx, u.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+	}
+	return ok(w, v)
 }
 
 // targetUser loads the User named by the {id} path value.

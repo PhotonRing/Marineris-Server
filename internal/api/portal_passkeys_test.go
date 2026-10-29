@@ -79,18 +79,27 @@ func (f *fakeAutheliaPasskeys) DeleteAutheliaPasskey(_ context.Context, username
 	return store.ErrNotFound
 }
 
-func (f *fakeAutheliaPasskeys) DeleteAutheliaUser(_ context.Context, username string) error {
+func (f *fakeAutheliaPasskeys) DeleteAutheliaUser(ctx context.Context, username string) error {
+	_ = f.DeleteAutheliaSecondFactors(ctx, username)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for k := range f.handles {
+		if strings.HasSuffix(k, "/"+username) {
+			delete(f.handles, k)
+		}
+	}
+	return nil
+}
+
+// DeleteAutheliaSecondFactors removes the User's passkeys (the fake keeps no
+// authenticator); the user handle stays.
+func (f *fakeAutheliaPasskeys) DeleteAutheliaSecondFactors(_ context.Context, username string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for i := len(f.keys) - 1; i >= 0; i-- {
 		if f.added[i].Username == username {
 			f.keys = append(f.keys[:i], f.keys[i+1:]...)
 			f.added = append(f.added[:i], f.added[i+1:]...)
-		}
-	}
-	for k := range f.handles {
-		if strings.HasSuffix(k, "/"+username) {
-			delete(f.handles, k)
 		}
 	}
 	return nil

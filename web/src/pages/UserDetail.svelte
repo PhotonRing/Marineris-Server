@@ -1,13 +1,21 @@
 <script>
   // One User: display name and e-mail (the Username never changes), custom
-  // Groups, disable or enable, delete. Only the Owner acts on Administrators
-  // and on the Owner; the buttons follow that rule, the API enforces it.
+  // Groups, disable or enable, Reset link, delete. Only the Owner acts on
+  // Administrators and on the Owner; the buttons follow that rule, the API
+  // enforces it.
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
   import { onMount } from 'svelte';
   import { get, post, put, del, describe } from '../lib/api.js';
   import { path, navigate, link } from '../lib/router.js';
   import { app, toast, loadSession } from '../lib/state.svelte.js';
   import Modal from '../components/Modal.svelte';
+  import LinkDialog from '../components/LinkDialog.svelte';
+
+  const RESETS = {
+    password: 'Password',
+    second_factor: 'Second factor (authenticator and passkeys)',
+    both: 'Password and second factor',
+  };
 
   const BUILTIN = ['admins', 'proxy-admins'];
   const id = Number($path.split('/')[2] || 0);
@@ -23,6 +31,10 @@
   let busy = $state('');
   let deleteOpen = $state(false);
   let deleteConfirm = $state('');
+  let resetOpen = $state(false);
+  let resets = $state('password');
+  let resetLink = $state(null); // the Reset link just created, with its URL
+  let resetLinkOpen = $state(false);
 
   let me = $derived(app.session?.user?.id === id);
   let viewerIsOwner = $derived(!!app.session?.rights?.owner);
@@ -129,6 +141,38 @@
     }
   }
 
+  // A Reset link (step-up): the User is signed out everywhere and blocked
+  // until they use it or it is revoked. A new one replaces a pending one.
+  async function createReset() {
+    busy = 'reset';
+    try {
+      resetLink = await post(`${base}/reset`, { resets });
+      resetOpen = false;
+      resetLinkOpen = true;
+      show(await get(base));
+    } catch (err) {
+      toast(describe(err), 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function revokeReset() {
+    if (!confirm(`Revoke the Reset link? ${user.username} can sign in again with their old credentials.`)) return;
+    busy = 'reset';
+    try {
+      await del(`/api/links/${user.reset.id}`);
+      show(await get(base));
+      toast('Reset link revoked');
+    } catch (err) {
+      toast(describe(err), 'error');
+    } finally {
+      busy = '';
+    }
+  }
+
+  const when = (t) => new Date(t).toLocaleString();
+
   async function remove() {
     busy = 'delete';
     try {
@@ -155,7 +199,7 @@
         <h2>
           {user.display_name}
           {#if user.owner}<span class="badge ok">Owner</span>{/if}
-          <span class="badge {user.state === 'active' ? 'ok' : 'error'}">{user.state}</span>
+          <span class="badge {{ active: 'ok', 'reset pending': 'warn' }[user.state] || 'error'}">{user.state}</span>
         </h2>
       </div>
       {#if !mayAct}
@@ -228,6 +272,29 @@
           everywhere. Deleting removes them for good.
         </p>
       </div>
+
+      <div class="card">
+        <h2>Reset link</h2>
+        {#if user.reset}
+          <div class="alert">
+            A Reset link for the {RESETS[user.reset.resets].toLowerCase()} is pending
+            {#if user.reset.expired}(it expired on {when(user.reset.expires_at)}){:else}until {when(user.reset.expires_at)}{/if}.
+            {user.username} cannot sign in until it is used or revoked.
+          </div>
+        {/if}
+        <p class="small muted">
+          For someone who lost their password or phone. They are signed out everywhere and cannot sign in until they
+          open the link and set what it resets. Revoking it lets them sign in again with their old credentials.
+        </p>
+        <div class="row end">
+          {#if user.reset}
+            <button onclick={revokeReset} disabled={busy === 'reset'}>Revoke</button>
+          {/if}
+          <button onclick={() => ((resets = 'password'), (resetOpen = true))} disabled={busy === 'reset'}>
+            {user.reset ? 'New Reset link…' : 'Create a Reset link…'}
+          </button>
+        </div>
+      </div>
     {/if}
 
     {#if viewerIsOwner && !user.owner && isAdmin && user.state === 'active'}
@@ -242,6 +309,33 @@
     {/if}
   {/if}
 </div>
+
+<Modal bind:open={resetOpen} title="Reset link for {user?.username}">
+  <fieldset class="stack">
+    <legend>What it resets</legend>
+    {#each Object.entries(RESETS) as [value, label] (value)}
+      <label class="check"><input type="radio" name="resets" {value} bind:group={resets} /> {label}</label>
+    {/each}
+  </fieldset>
+  <p class="small muted">
+    {user?.username} is signed out everywhere at once.
+    {#if resets !== 'password'}Their old authenticator and passkeys stop working when they use the link.{/if}
+    {#if user?.reset}The pending Reset link stops working.{/if}
+  </p>
+  {#snippet actions()}
+    <button onclick={() => (resetOpen = false)}>Cancel</button>
+    <button class="primary" onclick={createReset} disabled={busy === 'reset'}>Create the Reset link</button>
+  {/snippet}
+</Modal>
+
+<LinkDialog bind:open={resetLinkOpen} title="Reset link created" url={resetLink?.url || ''}>
+  {#if resetLink}
+    <p>
+      Send this link to <strong>{resetLink.display_name}</strong>. It opens on the sign-in portal, where they set their
+      {RESETS[resetLink.resets].toLowerCase()}. It works once, until {when(resetLink.expires_at)}.
+    </p>
+  {/if}
+</LinkDialog>
 
 <Modal bind:open={deleteOpen} title="Delete {user?.username}">
   <p>Their passkeys, authenticator, Group memberships and sessions are removed. This cannot be undone.</p>

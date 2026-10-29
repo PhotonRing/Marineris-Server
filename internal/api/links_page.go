@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/photonring/marineris-server/internal/auth"
+	"github.com/photonring/marineris-server/internal/configmgr"
 	"github.com/photonring/marineris-server/internal/setup"
 	"github.com/photonring/marineris-server/internal/store"
 )
@@ -66,19 +67,46 @@ func (s *Server) handleLinkRead(w http.ResponseWriter, r *http.Request, rc *reqC
 	if err != nil {
 		return err
 	}
-	b, err := s.brand(r.Context(), rc.settings)
+	ctx := r.Context()
+	b, err := s.brand(ctx, rc.settings)
 	if err != nil {
 		return err
+	}
+	display := l.DisplayName
+	if l.Kind == store.LinkReset {
+		u, err := s.Store.GetUser(ctx, l.UserID)
+		if err != nil {
+			return err
+		}
+		display = u.DisplayName
 	}
 	return ok(w, map[string]any{
 		"kind":         l.Kind,
 		"username":     l.Username,
-		"display_name": l.DisplayName,
+		"display_name": display,
 		// The page is on the portal's host: Marineris's image URLs are
 		// not reachable there, Authelia's logo is.
 		"brand": map[string]string{"name": b.Name, "accent": b.Accent},
-		"sets":  []string{"password", "second_factor"},
+		"sets":  linkSets(l),
 	})
+}
+
+// linkSets is what the link's page asks for: both for an Invite, what it
+// resets for a Reset link.
+func linkSets(l *store.Link) []string {
+	sets := []string{}
+	if l.Kind == store.LinkInvite || l.ResetsPassword() {
+		sets = append(sets, "password")
+	}
+	if l.Kind == store.LinkInvite || l.ResetsSecondFactor() {
+		sets = append(sets, "second_factor")
+	}
+	return sets
+}
+
+// setsSecondFactor reports whether the link's page sets a second factor.
+func setsSecondFactor(l *store.Link) bool {
+	return l.Kind == store.LinkInvite || l.ResetsSecondFactor()
 }
 
 // handleLinkTOTP starts setting up an authenticator for the link's User.
@@ -86,6 +114,9 @@ func (s *Server) handleLinkTOTP(w http.ResponseWriter, r *http.Request, rc *reqC
 	l, _, err := s.pageLink(r, rc)
 	if err != nil {
 		return err
+	}
+	if !setsSecondFactor(l) {
+		return badRequest("this link does not reset the second factor")
 	}
 	secret := auth.NewTOTPSecret()
 	now := time.Now()
@@ -105,38 +136,75 @@ func (s *Server) handleLinkTOTP(w http.ResponseWriter, r *http.Request, rc *reqC
 	return ok(w, map[string]string{"totp_secret": secret, "otpauth_uri": uri, "qr": qrDataURL(uri)})
 }
 
-// handleLinkFinish sets what the link sets. For an Invite: the User is
-// created, with their Groups, only when the password and the
-// authenticator's code are both valid.
+// linkFinish is what the link's page sends: the fields of what the link
+// sets.
+type linkFinish struct {
+	Password string `json:"password"`
+	TOTPCode string `json:"totp_code"`
+}
+
+// handleLinkFinish sets what the link sets: an Invite creates its User, a
+// Reset link replaces the User's password, second factor or both.
 func (s *Server) handleLinkFinish(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
 	l, keys, err := s.pageLink(r, rc)
 	if err != nil {
 		return err
 	}
-	if l.Kind != store.LinkInvite {
-		return errLinkInvalid
-	}
-	var req struct {
-		Password string `json:"password"`
-		TOTPCode string `json:"totp_code"`
-	}
+	var req linkFinish
 	if err := decode(r, &req); err != nil {
 		return err
 	}
-	if err := auth.CheckPasswordPolicy(l.Username, req.Password); err != nil {
-		return fieldError("password", err.Error())
+	switch l.Kind {
+	case store.LinkInvite:
+		return s.finishInvite(w, r, rc, l, keys, req)
+	case store.LinkReset:
+		return s.finishReset(w, r, rc, l, keys, req)
 	}
+	return errLinkInvalid
+}
+
+// linkSecondFactor is the second factor set up on the link's page.
+type linkSecondFactor struct {
+	totpSecret string // in clear: sealed with the User's WebAuthn ID
+	totpStep   int64  // the step of the code that confirmed it
+}
+
+// secondFactor checks the second factor set up on the link's page: the
+// authenticator, confirmed by a valid code. A wrong code counts against the
+// link and is audited as action.
+func (s *Server) secondFactor(r *http.Request, rc *reqCtx, l *store.Link, keys []string, req linkFinish, action string) (*linkSecondFactor, error) {
 	s.linkMu.Lock()
 	p := s.linkTOTP[l.ID]
 	s.linkMu.Unlock()
 	if p == nil || time.Now().After(p.expires) {
-		return badRequest("set up the authenticator again")
+		return nil, badRequest("set up the authenticator again")
 	}
 	step, good := auth.VerifyTOTP(p.secret, req.TOTPCode, time.Now())
 	if !good {
 		s.Throttle.Fail(keys...)
-		s.audit(r, rc, "invite.accept", l.Username, false, "wrong authenticator code")
-		return fieldError("totp_code", "is not valid; check the time on your phone")
+		s.audit(r, rc, action, l.Username, false, "wrong authenticator code")
+		return nil, fieldError("totp_code", "is not valid; check the time on your phone")
+	}
+	return &linkSecondFactor{totpSecret: p.secret, totpStep: step}, nil
+}
+
+// linkDone forgets what the page set up for the link once it is used.
+func (s *Server) linkDone(l *store.Link, keys []string) {
+	s.linkMu.Lock()
+	delete(s.linkTOTP, l.ID)
+	s.linkMu.Unlock()
+	s.Throttle.Succeed(keys[1:]...)
+}
+
+// finishInvite creates the Invite's User, with their Groups, only when the
+// password and the second factor are both valid.
+func (s *Server) finishInvite(w http.ResponseWriter, r *http.Request, rc *reqCtx, l *store.Link, keys []string, req linkFinish) error {
+	if err := auth.CheckPasswordPolicy(l.Username, req.Password); err != nil {
+		return fieldError("password", err.Error())
+	}
+	sf, err := s.secondFactor(r, rc, l, keys, req, "invite.accept")
+	if err != nil {
+		return err
 	}
 	ctx := r.Context()
 	hash, err := auth.HashPassword(ctx, req.Password)
@@ -147,10 +215,11 @@ func (s *Server) handleLinkFinish(w http.ResponseWriter, r *http.Request, rc *re
 	if _, err := rand.Read(handle); err != nil {
 		return err
 	}
-	sealed, err := s.Box.Seal([]byte(p.secret), setup.TOTPContext(handle))
+	sealed, err := s.Box.Seal([]byte(sf.totpSecret), setup.TOTPContext(handle))
 	if err != nil {
 		return err
 	}
+	step := sf.totpStep
 	// A former User with the same Username may have left rows in Authelia:
 	// the new one inherits nothing.
 	if err := s.deleteAutheliaUser(ctx, l.Username); err != nil {
@@ -167,14 +236,77 @@ func (s *Server) handleLinkFinish(w http.ResponseWriter, r *http.Request, rc *re
 	case err != nil:
 		return err
 	}
-	s.linkMu.Lock()
-	delete(s.linkTOTP, l.ID)
-	s.linkMu.Unlock()
-	s.Throttle.Succeed(keys[1:]...)
+	s.linkDone(l, keys)
 	rc.user = u
 	s.audit(r, rc, "invite.accept", u.Username, true, "")
 	s.applyNow(u.Username, "invite accepted by "+u.Username)
 	return ok(w, map[string]string{"redirect_url": s.signInURL(ctx, rc.settings)})
+}
+
+// finishReset sets only what the Reset link resets; the rest of the User
+// stays as it was. A new second factor replaces every old one: Authelia's
+// authenticator and passkeys go first, then, with the link used, the
+// Marineris authenticator, recovery codes and passkeys. Using the link lifts
+// the block on the User.
+func (s *Server) finishReset(w http.ResponseWriter, r *http.Request, rc *reqCtx, l *store.Link, keys []string, req linkFinish) error {
+	ctx := r.Context()
+	u, err := s.Store.GetUser(ctx, l.UserID)
+	if err != nil {
+		return err
+	}
+	var change store.ResetChange
+	if l.ResetsPassword() {
+		if err := auth.CheckPasswordPolicy(u.Username, req.Password); err != nil {
+			return fieldError("password", err.Error())
+		}
+	}
+	var sf *linkSecondFactor
+	if l.ResetsSecondFactor() {
+		if sf, err = s.secondFactor(r, rc, l, keys, req, "reset.use"); err != nil {
+			return err
+		}
+	}
+	if l.ResetsPassword() {
+		if change.PasswordHash, err = auth.HashPassword(ctx, req.Password); err != nil {
+			return err
+		}
+	}
+	if sf != nil {
+		if change.TOTPSecret, err = s.Box.Seal([]byte(sf.totpSecret), setup.TOTPContext(u.WebAuthnID)); err != nil {
+			return err
+		}
+		change.TOTPLastStep = sf.totpStep
+		// Before the new factor exists: a lost device must never sign in
+		// again. The User stays blocked if this fails.
+		if err := s.deleteAutheliaSecondFactors(ctx, u.Username); err != nil {
+			s.Log.Error("removing a User's second factors from Authelia's database", "user", u.Username, "err", err)
+			s.audit(r, rc, "reset.use", u.Username, false, "authelia: "+err.Error())
+			return &Error{Status: http.StatusServiceUnavailable, Code: "authelia_unavailable",
+				Message: "your old authenticator and passkeys could not be removed yet; try again in a minute"}
+		}
+	}
+	switch err := s.Store.UseReset(ctx, l, change); {
+	case errors.Is(err, store.ErrNotFound):
+		return errLinkInvalid
+	case err != nil:
+		return err
+	}
+	s.linkDone(l, keys)
+	rc.user = u
+	s.audit(r, rc, "reset.use", u.Username, true, l.Resets)
+	s.applyNow(u.Username, "reset link used by "+u.Username)
+	return ok(w, map[string]string{"redirect_url": s.signInURL(ctx, rc.settings)})
+}
+
+func (s *Server) deleteAutheliaSecondFactors(ctx context.Context, username string) error {
+	if s.AutheliaPasskeys == nil {
+		return nil
+	}
+	err := s.AutheliaPasskeys.DeleteAutheliaSecondFactors(ctx, username)
+	if errors.Is(err, configmgr.ErrAutheliaNotReady) {
+		return nil
+	}
+	return err
 }
 
 // applyNow applies Authelia's configuration before answering, so the User

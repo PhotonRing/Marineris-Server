@@ -164,6 +164,7 @@ func (s *Server) table() []Route {
 		{P, "/api/invites", StepUp, Administrator, false, s.handleInviteCreate},
 		{G, "/api/links", Authed, Administrator, false, s.handleLinkList},
 		{D, "/api/links/{id}", Authed, Administrator, false, s.handleLinkRevoke},
+		{P, "/api/users/{id}/reset", StepUp, Administrator, false, s.handleResetCreate},
 
 		// Groups (built-ins are listed but changed only by the Owner)
 		{G, "/api/groups", Authed, Administrator, false, s.handleGroupList},

@@ -41,6 +41,8 @@ func userLine(u *store.User, ownerID int64) string {
 	}
 	if u.Disabled {
 		state = "disabled"
+	} else if u.ResetPending {
+		state = "reset-pending"
 	}
 	return fmt.Sprintf("%s\t%s\t%s\t%s\t%s\tcreated %s", u.Username, u.DisplayName, groups, owner, state, u.CreatedAt.Format(time.RFC3339))
 }

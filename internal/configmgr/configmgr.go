@@ -302,7 +302,8 @@ func (m *Manager) AutheliaInput(ctx context.Context) (authelia.Input, error) {
 		}
 		in.Users = append(in.Users, authelia.User{
 			Username: u.Username, DisplayName: u.DisplayName, Email: email, PasswordHash: u.PasswordHash,
-			Groups: u.Groups, Disabled: u.Disabled,
+			// A Reset link blocks the User until it is used or revoked.
+			Groups: u.Groups, Disabled: u.Disabled || u.ResetPending,
 		})
 	}
 	return in, nil

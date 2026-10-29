@@ -81,7 +81,7 @@
     }
   }
 
-  const stateLook = { active: 'ok', disabled: 'error' };
+  const stateLook = { active: 'ok', disabled: 'error', 'reset pending': 'warn' };
   const when = (t) => new Date(t).toLocaleString();
 </script>
 

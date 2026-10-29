@@ -136,9 +136,67 @@ func (s *Server) handleLinkRevoke(w http.ResponseWriter, r *http.Request, rc *re
 	if err != nil {
 		return err
 	}
+	if l.Kind == store.LinkReset {
+		// Revoking lets the User sign in again: only who may reset them
+		// may revoke it.
+		u, err := s.Store.GetUser(ctx, l.UserID)
+		if err != nil {
+			return err
+		}
+		if err := s.mayActOn(ctx, rc.user, u); err != nil {
+			var apiErr *Error
+			if errors.As(err, &apiErr) {
+				s.audit(r, rc, "reset.revoke", l.Username, false, apiErr.Code)
+			}
+			return err
+		}
+	}
 	if err := s.Store.RevokeLink(ctx, l.ID); err != nil {
 		return err
 	}
 	s.audit(r, rc, l.Kind+".revoke", l.Username, true, "")
+	if l.Kind == store.LinkReset {
+		// Authelia lets the User in again with their old credentials.
+		s.applyAsync(rc.actor(), "reset link of "+l.Username+" revoked", true, false)
+	}
 	return ok(w, map[string]bool{"ok": true})
+}
+
+// handleResetCreate creates a Reset link for a User: from now on they are
+// signed out everywhere and cannot sign in until the link is used or
+// revoked. Nobody resets themselves (the Account page or the CLI do that),
+// and only the Owner resets Administrators.
+func (s *Server) handleResetCreate(w http.ResponseWriter, r *http.Request, rc *reqCtx) error {
+	// Who is acted on first: a refusal does not depend on the body.
+	u, err := s.actOn(r, rc, "reset.create", false)
+	if err != nil {
+		return err
+	}
+	var req struct {
+		Resets string `json:"resets"`
+	}
+	if err := decode(r, &req); err != nil {
+		return err
+	}
+	if !store.ValidResets(req.Resets) {
+		return fieldError("resets", "must be password, second_factor or both")
+	}
+	ctx := r.Context()
+	portal, err := s.linkPortal(ctx, rc.settings)
+	if err != nil {
+		return err
+	}
+	if portal == "" {
+		return errNoPortal
+	}
+	token, hash := newLinkToken()
+	l := &store.Link{UserID: u.ID, Resets: req.Resets, CreatedBy: rc.actor()}
+	if err := s.Store.CreateReset(ctx, l, hash); err != nil {
+		return err
+	}
+	s.audit(r, rc, "reset.create", u.Username, true, req.Resets)
+	// Authelia renders the User disabled and ends their session on their
+	// next request.
+	s.applyAsync(rc.actor(), "reset link for "+u.Username, true, false)
+	return ok(w, linkView{Link: l, URL: portal + caddy.PortalLinkPath + "/#" + token})
 }

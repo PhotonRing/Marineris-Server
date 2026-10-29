@@ -20,6 +20,9 @@ type User struct {
 	DisplayName string `json:"display_name"`
 	Email       string `json:"email"`
 	Disabled    bool   `json:"disabled"`
+	// ResetPending: a Reset link blocks the User until it is used or
+	// revoked. Read-only: set through CreateReset.
+	ResetPending bool `json:"reset_pending"`
 	// Groups are the names of the user's groups, sorted. Read-only: set
 	// through AddGroupMember.
 	Groups       []string `json:"groups"`
@@ -51,14 +54,16 @@ func (u *User) IsProxyAdmin() bool {
 	return u.IsAdministrator() && slices.Contains(u.Groups, GroupProxyAdmins)
 }
 
-// userCols reads the user's groups in the same query, one name per line.
+// userCols reads the user's groups in the same query, one name per line,
+// and whether a Reset link blocks them.
 const userCols = `id, username, display_name, email, disabled, password_hash, totp_secret, totp_last_step, authelia_totp, recovery_codes, webauthn_id, created_at, updated_at,
-	(SELECT COALESCE(group_concat(g.name, char(10)), '') FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = users.id)`
+	(SELECT COALESCE(group_concat(g.name, char(10)), '') FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = users.id),
+	` + unfinishedReset
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	var codes, groups string
-	if err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Disabled, &u.PasswordHash, &u.TOTPSecret, &u.TOTPLastStep, &u.AutheliaTOTP, &codes, &u.WebAuthnID, &u.CreatedAt, &u.UpdatedAt, &groups); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.Email, &u.Disabled, &u.PasswordHash, &u.TOTPSecret, &u.TOTPLastStep, &u.AutheliaTOTP, &codes, &u.WebAuthnID, &u.CreatedAt, &u.UpdatedAt, &groups, &u.ResetPending); err != nil {
 		return nil, notFound(err)
 	}
 	if err := json.Unmarshal([]byte(codes), &u.RecoveryCodes); err != nil {
@@ -150,12 +155,12 @@ var ErrDisabled = errors.New("store: user disabled")
 
 // TransferOwnership makes to the Owner in place of from, who stays an
 // Administrator. The new Owner must be an enabled member of GroupAdmins
-// (ErrNotAdministrator, ErrDisabled); ErrConflict when from is no longer the
-// Owner (a concurrent handover won).
+// (ErrNotAdministrator; ErrDisabled also when a Reset link blocks them);
+// ErrConflict when from is no longer the Owner (a concurrent handover won).
 func (s *Store) TransferOwnership(ctx context.Context, from, to int64) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		var disabled bool
-		if err := tx.QueryRowContext(ctx, `SELECT disabled FROM users WHERE id = ?`, to).Scan(&disabled); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT disabled OR `+unfinishedReset+` FROM users WHERE id = ?`, to).Scan(&disabled); err != nil {
 			return notFound(err)
 		}
 		in, err := isMember(ctx, tx, to, GroupAdmins)

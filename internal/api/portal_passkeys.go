@@ -41,6 +41,9 @@ type AutheliaPasskeyStore interface {
 	// DeleteAutheliaUser removes everything Authelia keeps for a deleted
 	// User (passkeys, authenticator).
 	DeleteAutheliaUser(ctx context.Context, username string) error
+	// DeleteAutheliaSecondFactors removes a User's authenticator and
+	// passkeys from Authelia (a second-factor Reset link).
+	DeleteAutheliaSecondFactors(ctx context.Context, username string) error
 }
 
 const portalTicketTTL = 5 * time.Minute

@@ -52,11 +52,17 @@ func signInRefused(u *store.User) *Error {
 	if u.Disabled {
 		return errDisabled
 	}
+	if u.ResetPending {
+		return errResetPending
+	}
 	return nil
 }
 
 var errDisabled = &Error{Status: http.StatusForbidden, Code: "account_disabled",
 	Message: "this User is disabled; ask an Administrator to enable it"}
+
+var errResetPending = &Error{Status: http.StatusForbidden, Code: "reset_pending",
+	Message: "a Reset link is pending for this User: open it to set new credentials, or ask an Administrator to revoke it"}
 
 // cleanDisplayName validates a person's display name: 1 to 64 characters,
 // no control characters, no surrounding spaces.
