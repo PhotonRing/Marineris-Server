@@ -6,7 +6,7 @@ require (
 	github.com/compose-spec/compose-go/v2 v2.16.2
 	github.com/docker/cli v29.9.2+incompatible
 	github.com/docker/compose/v5 v5.6.1
-	github.com/fxamacker/cbor/v2 v2.9.4
+	github.com/fxamacker/cbor/v2 v2.10.0
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/libdns/cloudflare v0.2.2
 	github.com/libdns/gandi v1.2.1
